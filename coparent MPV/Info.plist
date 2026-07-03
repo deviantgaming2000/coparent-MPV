@@ -1,5 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<dict/>
+	<dict>
+		<key>AI_BACKEND_URL</key>
+		<string>http://localhost:3000</string>
+		<key>AI_BACKEND_AUTH_TOKEN</key>
+		<string>dev-token</string>
+		<key>NSMicrophoneUsageDescription</key>
+		<string>FactTrail uses the microphone only when you choose to dictate incident notes.</string>
+		<key>NSSpeechRecognitionUsageDescription</key>
+		<string>FactTrail uses speech recognition to transcribe dictated notes into your documentation.</string>
+		<key>NSLocationWhenInUseUsageDescription</key>
+		<string>FactTrail uses your location only while creating an exchange record so the exchange location can be saved with your documentation.</string>
+		<key>NSCameraUsageDescription</key>
+		<string>FactTrail uses the camera so you can capture a photo or screenshot to attach to a timeline entry.</string>
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>FactTrail uses your photo library so you can attach existing screenshots or photos to your timeline entries.</string>
+		<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+</dict>
 </plist>

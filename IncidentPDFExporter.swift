@@ -2,6 +2,76 @@ import Foundation
 import UIKit
 
 enum IncidentPDFExporter {
+    static func makeTimelinePDF(for incidents: [Incident]) throws -> URL {
+        let fileName = "FactTrail-Timeline-\(Date().timeIntervalSince1970).pdf"
+        let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+        let pageBounds = CGRect(x: 0, y: 0, width: 612, height: 792)
+        let renderer = UIGraphicsPDFRenderer(bounds: pageBounds)
+
+        try renderer.writePDF(to: outputURL) { context in
+            let writer = PDFPageWriter(context: context, pageBounds: pageBounds)
+
+            writer.startPage()
+            writer.addTitle("FactTrail Timeline")
+            writer.addText("Exported: \(DateFormatter.factTrailDateTime.string(from: Date()))", font: .systemFont(ofSize: 11), color: .secondaryLabel)
+            writer.addText("Number of events: \(incidents.count)", font: .systemFont(ofSize: 11), color: .secondaryLabel)
+            writer.addSpacing(12)
+
+            for (index, incident) in incidents.enumerated() {
+                writer.addHeading("Event \(index + 1)")
+                writer.addText("Date/Time: \(DateFormatter.factTrailDateTime.string(from: incident.incidentDate))")
+                writer.addText("Category: \(incident.category)")
+                writer.addSection(title: "Original Notes", text: incident.originalNotes)
+                if let analysis = incident.aiAnalysis {
+                    writer.addSection(title: "AI Understanding", text: analysis.understandingSummary.joined(separator: "\n"))
+                }
+                writer.addText("People Involved: \(displayValue(incident.peopleInvolved))")
+                writer.addText("Location: \(displayValue(incident.location))")
+                writer.addText("Child Involved: \(incident.childInvolved ? "Yes" : "No")")
+                writer.addSection(title: "Evidence Notes", text: incident.evidenceNotes)
+                if let analysis = incident.aiAnalysis, !analysis.evidenceMentioned.isEmpty {
+                    writer.addText("Evidence Mentioned: \(analysis.evidenceMentioned.joined(separator: ", "))")
+                }
+
+                if !incident.guidedAnswers.isEmpty {
+                    writer.addHeading("Follow-Up Questions and Answers")
+                    for answer in incident.guidedAnswers {
+                        let answerText = answer.answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Not answered" : answer.answer
+                        writer.addText("\(answer.question)\n\(answerText)")
+                    }
+                } else if !incident.followUpQuestions.isEmpty {
+                    writer.addHeading("Follow-Up Questions")
+                    for question in incident.followUpQuestions {
+                        writer.addText(question)
+                    }
+                }
+
+                if !incident.patternTags.isEmpty {
+                    writer.addText("Pattern Tags: \(incident.patternTags.map(\.displayName).joined(separator: ", "))")
+                }
+
+                writer.addSection(
+                    title: incident.finalDocumentationSummary.isEmpty ? "Neutral Summary" : "Final Documentation Summary",
+                    text: incident.finalDocumentationSummary.isEmpty ? incident.neutralSummary : incident.finalDocumentationSummary
+                )
+
+                if let completeness = incident.documentationCompleteness {
+                    writer.addText("Documentation Completeness: \(completeness.score)% - \(completeness.status)")
+                    if !completeness.completedItems.isEmpty {
+                        writer.addText("Completed: \(completeness.completedItems.joined(separator: ", "))")
+                    }
+                    if !completeness.missingItems.isEmpty {
+                        writer.addText("Still Missing: \(completeness.missingItems.joined(separator: ", "))")
+                    }
+                }
+
+                writer.addSpacing(16)
+            }
+        }
+
+        return outputURL
+    }
+
     static func makePDF(for incident: Incident) throws -> URL {
         var draft = IncidentDraft()
         draft.originalNotes = incident.originalNotes
@@ -11,6 +81,16 @@ enum IncidentPDFExporter {
         draft.childInvolved = incident.childInvolved
         draft.evidenceNotes = incident.evidenceNotes
         draft.evidenceAttachments = incident.evidenceAttachments
+        draft.evidenceTypes = incident.evidenceTypes
+        draft.guidedAnswers = incident.guidedAnswers
+        draft.patternTags = incident.patternTags
+        draft.aiAnalysis = incident.aiAnalysis
+        if !incident.finalDocumentationSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            draft.finalDocumentation = FinalDocumentationSummary(
+                summary: incident.finalDocumentationSummary,
+                completeness: incident.documentationCompleteness ?? DocumentationCompletenessCalculator.calculate(draft: draft, analysis: incident.aiAnalysis)
+            )
+        }
         draft.category = IncidentCategory(rawValue: incident.category) ?? .other
 
         let summaryDraft = IncidentSummaryDraft(
@@ -37,7 +117,16 @@ enum IncidentPDFExporter {
             writer.addSpacing(12)
 
             writer.addSection(title: "Original Notes", text: summaryDraft.draft.originalNotes)
-            writer.addSection(title: "Neutral Summary", text: summaryDraft.neutralSummary)
+            if let analysis = summaryDraft.draft.aiAnalysis {
+                writer.addSection(title: "AI Understanding", text: analysis.understandingSummary.joined(separator: "\n"))
+                if !analysis.evidenceMentioned.isEmpty {
+                    writer.addText("Evidence Mentioned: \(analysis.evidenceMentioned.joined(separator: ", "))")
+                }
+            }
+            writer.addSection(
+                title: summaryDraft.draft.finalDocumentation == nil ? "Neutral Summary" : "Final Documentation Summary",
+                text: summaryDraft.draft.finalDocumentation?.summary ?? summaryDraft.neutralSummary
+            )
 
             if !summaryDraft.draft.evidenceAttachments.isEmpty {
                 writer.addHeading("Attached Photos and Screenshots")
@@ -53,9 +142,25 @@ enum IncidentPDFExporter {
             for (index, question) in summaryDraft.followUpQuestions.enumerated() {
                 writer.addText("\(index + 1). \(question)")
             }
+
+            if let completeness = summaryDraft.draft.finalDocumentation?.completeness {
+                writer.addHeading("Documentation Completeness")
+                writer.addText("\(completeness.score)% - \(completeness.status)")
+                if !completeness.completedItems.isEmpty {
+                    writer.addText("Completed: \(completeness.completedItems.joined(separator: ", "))")
+                }
+                if !completeness.missingItems.isEmpty {
+                    writer.addText("Still Missing: \(completeness.missingItems.joined(separator: ", "))")
+                }
+            }
         }
 
         return outputURL
+    }
+
+    private static func displayValue(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Not specified" : trimmed
     }
 }
 

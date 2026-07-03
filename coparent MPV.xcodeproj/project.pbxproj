@@ -10,6 +10,22 @@
 		217688052FF36583008ADFC1 /* IncidentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 217688042FF36581008ADFC1 /* IncidentStore.swift */; };
 		217688072FF36586008ADFC1 /* Incident.swift in Sources */ = {isa = PBXBuildFile; fileRef = 217688062FF36586008ADFC1 /* Incident.swift */; };
 		217688092FF37689008ADFC1 /* IncidentPDFExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 217688082FF37689008ADFC1 /* IncidentPDFExporter.swift */; };
+		2176880B2FF38ED3008ADFC1 /* AIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2176880A2FF38ED3008ADFC1 /* AIService.swift */; };
+		2176880D2FF3938F008ADFC1 /* AIBackendService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2176880C2FF3938F008ADFC1 /* AIBackendService.swift */; };
+		2176880F2FF3A3E7008ADFC1 /* FactTrailAIInstructions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2176880E2FF3A3E7008ADFC1 /* FactTrailAIInstructions.swift */; };
+		217688112FF3A887008ADFC1 /* DocumentationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 217688102FF3A887008ADFC1 /* DocumentationModels.swift */; };
+		217688132FF43FDE008ADFC1 /* ExchangeRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 217688122FF43FDE008ADFC1 /* ExchangeRecord.swift */; };
+		217688152FF43FEB008ADFC1 /* ExchangeRecordStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 217688142FF43FEB008ADFC1 /* ExchangeRecordStore.swift */; };
+		217688172FF43FFF008ADFC1 /* ExchangeLocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 217688162FF43FFF008ADFC1 /* ExchangeLocationManager.swift */; };
+		217688192FF4401D008ADFC1 /* ExchangeRecordEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 217688182FF4401D008ADFC1 /* ExchangeRecordEntryView.swift */; };
+		2176881B2FF4D59F008ADFC1 /* FactTrailTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2176881A2FF4D59F008ADFC1 /* FactTrailTheme.swift */; };
+		2176881D2FF4E5AA008ADFC1 /* SpeechTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2176881C2FF4E5AA008ADFC1 /* SpeechTranscriber.swift */; };
+		2176882F2FF62C02008ADFC1 /* CheckIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2176882E2FF62C02008ADFC1 /* CheckIn.swift */; };
+		217688312FF62C12008ADFC1 /* EntryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 217688302FF62C12008ADFC1 /* EntryStore.swift */; };
+		217688332FF62C22008ADFC1 /* CheckInStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 217688322FF62C22008ADFC1 /* CheckInStore.swift */; };
+		217688452FF62D02008ADFC1 /* Entry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 217688442FF62D02008ADFC1 /* Entry.swift */; };
+		217688472FF62D46008ADFC1 /* CheckInSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 217688462FF62D46008ADFC1 /* CheckInSheetView.swift */; };
+		217688492FF6E3C7008ADFC1 /* CheckInFollowUpSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 217688482FF6E3C7008ADFC1 /* CheckInFollowUpSheetView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -17,6 +33,22 @@
 		217688042FF36581008ADFC1 /* IncidentStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IncidentStore.swift; sourceTree = "<group>"; };
 		217688062FF36586008ADFC1 /* Incident.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Incident.swift; sourceTree = "<group>"; };
 		217688082FF37689008ADFC1 /* IncidentPDFExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IncidentPDFExporter.swift; sourceTree = "<group>"; };
+		2176880A2FF38ED3008ADFC1 /* AIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIService.swift; sourceTree = "<group>"; };
+		2176880C2FF3938F008ADFC1 /* AIBackendService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIBackendService.swift; sourceTree = "<group>"; };
+		2176880E2FF3A3E7008ADFC1 /* FactTrailAIInstructions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FactTrailAIInstructions.swift; sourceTree = "<group>"; };
+		217688102FF3A887008ADFC1 /* DocumentationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentationModels.swift; sourceTree = "<group>"; };
+		217688122FF43FDE008ADFC1 /* ExchangeRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExchangeRecord.swift; sourceTree = "<group>"; };
+		217688142FF43FEB008ADFC1 /* ExchangeRecordStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExchangeRecordStore.swift; sourceTree = "<group>"; };
+		217688162FF43FFF008ADFC1 /* ExchangeLocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExchangeLocationManager.swift; sourceTree = "<group>"; };
+		217688182FF4401D008ADFC1 /* ExchangeRecordEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExchangeRecordEntryView.swift; sourceTree = "<group>"; };
+		2176881A2FF4D59F008ADFC1 /* FactTrailTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FactTrailTheme.swift; sourceTree = "<group>"; };
+		2176881C2FF4E5AA008ADFC1 /* SpeechTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechTranscriber.swift; sourceTree = "<group>"; };
+		2176882E2FF62C02008ADFC1 /* CheckIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckIn.swift; sourceTree = "<group>"; };
+		217688302FF62C12008ADFC1 /* EntryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryStore.swift; sourceTree = "<group>"; };
+		217688322FF62C22008ADFC1 /* CheckInStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInStore.swift; sourceTree = "<group>"; };
+		217688442FF62D02008ADFC1 /* Entry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Entry.swift; sourceTree = "<group>"; };
+		217688462FF62D46008ADFC1 /* CheckInSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInSheetView.swift; sourceTree = "<group>"; };
+		217688482FF6E3C7008ADFC1 /* CheckInFollowUpSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInFollowUpSheetView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -59,6 +91,22 @@
 				217688042FF36581008ADFC1 /* IncidentStore.swift */,
 				217688062FF36586008ADFC1 /* Incident.swift */,
 				217688082FF37689008ADFC1 /* IncidentPDFExporter.swift */,
+				2176880A2FF38ED3008ADFC1 /* AIService.swift */,
+				2176880C2FF3938F008ADFC1 /* AIBackendService.swift */,
+				2176880E2FF3A3E7008ADFC1 /* FactTrailAIInstructions.swift */,
+				217688102FF3A887008ADFC1 /* DocumentationModels.swift */,
+				217688122FF43FDE008ADFC1 /* ExchangeRecord.swift */,
+				217688142FF43FEB008ADFC1 /* ExchangeRecordStore.swift */,
+				217688162FF43FFF008ADFC1 /* ExchangeLocationManager.swift */,
+				217688182FF4401D008ADFC1 /* ExchangeRecordEntryView.swift */,
+				2176881A2FF4D59F008ADFC1 /* FactTrailTheme.swift */,
+				2176881C2FF4E5AA008ADFC1 /* SpeechTranscriber.swift */,
+				2176882E2FF62C02008ADFC1 /* CheckIn.swift */,
+				217688302FF62C12008ADFC1 /* EntryStore.swift */,
+				217688322FF62C22008ADFC1 /* CheckInStore.swift */,
+				217688442FF62D02008ADFC1 /* Entry.swift */,
+				217688462FF62D46008ADFC1 /* CheckInSheetView.swift */,
+				217688482FF6E3C7008ADFC1 /* CheckInFollowUpSheetView.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -144,9 +192,25 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				217688472FF62D46008ADFC1 /* CheckInSheetView.swift in Sources */,
+				217688452FF62D02008ADFC1 /* Entry.swift in Sources */,
 				217688072FF36586008ADFC1 /* Incident.swift in Sources */,
 				217688092FF37689008ADFC1 /* IncidentPDFExporter.swift in Sources */,
+				2176880D2FF3938F008ADFC1 /* AIBackendService.swift in Sources */,
+				217688492FF6E3C7008ADFC1 /* CheckInFollowUpSheetView.swift in Sources */,
+				217688332FF62C22008ADFC1 /* CheckInStore.swift in Sources */,
+				217688192FF4401D008ADFC1 /* ExchangeRecordEntryView.swift in Sources */,
+				217688132FF43FDE008ADFC1 /* ExchangeRecord.swift in Sources */,
 				217688052FF36583008ADFC1 /* IncidentStore.swift in Sources */,
+				217688152FF43FEB008ADFC1 /* ExchangeRecordStore.swift in Sources */,
+				217688312FF62C12008ADFC1 /* EntryStore.swift in Sources */,
+				2176880B2FF38ED3008ADFC1 /* AIService.swift in Sources */,
+				2176881D2FF4E5AA008ADFC1 /* SpeechTranscriber.swift in Sources */,
+				2176882F2FF62C02008ADFC1 /* CheckIn.swift in Sources */,
+				2176880F2FF3A3E7008ADFC1 /* FactTrailAIInstructions.swift in Sources */,
+				2176881B2FF4D59F008ADFC1 /* FactTrailTheme.swift in Sources */,
+				217688172FF43FFF008ADFC1 /* ExchangeLocationManager.swift in Sources */,
+				217688112FF3A887008ADFC1 /* DocumentationModels.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
