@@ -19,6 +19,7 @@ struct ContentView: View {
     @State private var pendingExchangeRecordID: UUID?
     @State private var saveErrorMessage: String?
     @State private var shouldShowNamePrompt = false
+    @State private var shouldShowResetConfirmation = false
     @State private var shouldShowCheckInSheet = false
     @State private var pendingCheckInFollowUp: CheckIn?
     @State private var pendingCheckInIncidentDraft: IncidentDraft?
@@ -50,6 +51,7 @@ struct ContentView: View {
                         onViewTimeline: { path.append(.timeline) },
                         onViewInsights: { path.append(.insights) },
                         onEditName: { shouldShowNamePrompt = true },
+                        onResetData: { shouldShowResetConfirmation = true },
                         onOpenIncident: { incident in
                             path.append(.edit(incident.id))
                         },
@@ -276,6 +278,12 @@ struct ContentView: View {
             )
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.hidden)
+        }
+        .alert("Reset all data?", isPresented: $shouldShowResetConfirmation) {
+            Button("Reset Everything", role: .destructive, action: resetAllData)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently deletes every logged record, exchange, check-in, note, and document on this device, and returns the app to its first-launch state. This cannot be undone.")
         }
     }
 
@@ -558,6 +566,31 @@ struct ContentView: View {
         } catch {
             saveErrorMessage = "Check-in could not be saved on this device."
         }
+    }
+
+    /// Wipes every persisted record and returns the app to its first-launch state.
+    /// Deletes all on-disk stores (records, exchanges, check-ins, entries, documents
+    /// and their imported files), clears UserDefaults-backed notes, empties in-memory
+    /// state, and forgets the saved name so onboarding is shown again.
+    private func resetAllData() {
+        incidentStore.deleteAll()
+        exchangeRecordStore.deleteAll()
+        entryStore.deleteAll()
+        checkInStore.deleteAll()
+        documentStore.deleteAll()
+        UserDefaults.standard.removeObject(forKey: linkedNotesStorageKey)
+
+        incidents = []
+        exchangeRecords = []
+        entries = []
+        checkIns = []
+        linkedNotes = []
+        storedDocuments = []
+        saveErrorMessage = nil
+
+        path = []
+        userName = ""
+        hasAcceptedDisclaimer = false
     }
 }
 
@@ -1010,6 +1043,7 @@ private struct HomeView: View {
     let onViewTimeline: () -> Void
     var onViewInsights: () -> Void = {}
     let onEditName: () -> Void
+    var onResetData: () -> Void = {}
     let onOpenIncident: (Incident) -> Void
     let onOpenExchangeRecord: (ExchangeRecord) -> Void
     @Environment(\.colorScheme) private var colorScheme
@@ -1095,6 +1129,10 @@ private struct HomeView: View {
                         Text(appearance.rawValue).tag(appearance)
                     }
                 }
+
+                Divider()
+
+                Button("Reset All Data", systemImage: "trash", role: .destructive, action: onResetData)
             } label: {
                 Image("codoc-menu")
                     .renderingMode(.template)

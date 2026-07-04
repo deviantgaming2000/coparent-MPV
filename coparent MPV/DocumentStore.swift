@@ -27,6 +27,12 @@ struct DocumentStore {
         try data.write(to: metadataURL, options: [.atomic])
     }
 
+    /// Removes the metadata store and every imported file so the next load returns a clean, empty slate.
+    func deleteAll() {
+        try? FileManager.default.removeItem(at: metadataURL)
+        try? FileManager.default.removeItem(at: Self.filesDirectory)
+    }
+
     /// Copies a source file into the app's storage folder and returns the relative filename.
     func importFile(from sourceURL: URL, suggestedName: String? = nil) throws -> String {
         let filesFolder = Self.filesDirectory

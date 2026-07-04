@@ -28,6 +28,11 @@ struct ExchangeRecordStore {
         try data.write(to: fileURL, options: [.atomic])
     }
 
+    /// Removes the persisted store so the next load returns a clean, empty slate.
+    func deleteAll() {
+        try? FileManager.default.removeItem(at: fileURL)
+    }
+
     private static var defaultFileURL: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("facttrail-exchange-records.json")
