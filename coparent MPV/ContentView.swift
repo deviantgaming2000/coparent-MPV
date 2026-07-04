@@ -510,24 +510,7 @@ struct ContentView: View {
             + exchangeRecords.map { TimelineItem.exchangeRecord($0, incidentsByExchangeID[$0.id]) }
             + checkIns.map(TimelineItem.checkIn)
 
-        return items.map { item in
-            let kind: EntryKind
-            switch item {
-            case .incident: kind = item.isFlagged ? .flag : .entry
-            case .exchangeRecord: kind = .exchange
-            case .checkIn: kind = .checkin
-            }
-            return TimelineEntryInput(
-                id: item.id,
-                date: item.date,
-                kind: kind,
-                title: item.title,
-                text: item.summary,
-                tags: item.tags.map(\.displayName),
-                flagged: item.isFlagged,
-                location: item.locationText
-            )
-        }
+        return makeTimelineInputs(from: items)
     }
 
     private func attachImageData(_ data: Data, toTimelineID id: String, itemTitle: String, defaultCategory: DocumentCategory) {
@@ -715,6 +698,28 @@ private struct FactTrailSplashView: View {
                 .blur(radius: 62)
                 .offset(x: isAnimating ? -160 : 150, y: isAnimating ? 230 : 170)
         }
+    }
+}
+
+/// Maps the UI's timeline items to the neutral inputs consumed by the insights engine.
+private func makeTimelineInputs(from items: [TimelineItem]) -> [TimelineEntryInput] {
+    items.map { item in
+        let kind: EntryKind
+        switch item {
+        case .incident: kind = item.isFlagged ? .flag : .entry
+        case .exchangeRecord: kind = .exchange
+        case .checkIn: kind = .checkin
+        }
+        return TimelineEntryInput(
+            id: item.id,
+            date: item.date,
+            kind: kind,
+            title: item.title,
+            text: item.summary,
+            tags: item.tags.map(\.displayName),
+            flagged: item.isFlagged,
+            location: item.locationText
+        )
     }
 }
 
@@ -3396,6 +3401,7 @@ private struct TimelineView: View {
                             case .branch:
                                 BranchTimelineView(
                                     items: chronologicalItems,
+                                    annotations: timelineAnnotations,
                                     density: density,
                                     expandedItemIDs: $expandedItemIDs,
                                     notesFor: notes(for:),
@@ -3698,6 +3704,11 @@ private struct TimelineView: View {
         return grouped
             .map { (key: $0.key, items: $0.value.sorted { $0.date > $1.date }) }
             .sorted { $0.key.sortDate > $1.key.sortDate }
+    }
+
+    /// AI/heuristic pattern markers interleaved on the branch spine.
+    private var timelineAnnotations: [TimelineAnnotation] {
+        TimelineInsightEngine.analyze(entries: makeTimelineInputs(from: timelineItems)).annotations
     }
 
     private var timelineItems: [TimelineItem] {
