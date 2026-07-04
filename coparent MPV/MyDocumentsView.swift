@@ -3,54 +3,126 @@ import PhotosUI
 import UniformTypeIdentifiers
 import QuickLook
 
+/// The reference groups documents into three visual types (screenshot / photo / file),
+/// each with its own tint, independent of the richer semantic `DocumentCategory`.
+enum DocReferenceType {
+    case screenshot, photo, file
+
+    var label: String {
+        switch self {
+        case .screenshot: return "Screenshot"
+        case .photo: return "Photo"
+        case .file: return "File"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .screenshot: return Color(red: 0x4F / 255, green: 0x8F / 255, blue: 0x8B / 255)
+        case .photo: return Color(red: 0x2F / 255, green: 0x5D / 255, blue: 0x8C / 255)
+        case .file: return Color(red: 0x05 / 255, green: 0x96 / 255, blue: 0x69 / 255)
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .screenshot: return "text.bubble"
+        case .photo: return "photo"
+        case .file: return "doc"
+        }
+    }
+
+    static func classify(_ document: StoredDocument) -> DocReferenceType {
+        if document.category == .screenshot { return .screenshot }
+        if document.fileType == .image { return .photo }
+        return .file
+    }
+}
+
+private enum DocSortMode {
+    case date, name
+}
+
+private enum DocTypeFilter: CaseIterable, Identifiable {
+    case all, screenshots, photos, files, standalone
+
+    var id: Self { self }
+
+    var label: String {
+        switch self {
+        case .all: return "All"
+        case .screenshots: return "Screenshots"
+        case .photos: return "Photos"
+        case .files: return "Files"
+        case .standalone: return "Standalone"
+        }
+    }
+
+    var referenceType: DocReferenceType? {
+        switch self {
+        case .screenshots: return .screenshot
+        case .photos: return .photo
+        case .files: return .file
+        case .all, .standalone: return nil
+        }
+    }
+}
+
 struct MyDocumentsView: View {
     let documents: [StoredDocument]
     let onAddDocument: (StoredDocument) -> Void
     let onUpdateDocument: (StoredDocument) -> Void
     let onDeleteDocument: (StoredDocument) -> Void
+    var onTimeline: () -> Void = {}
+    var onInsights: () -> Void = {}
+    var linkedEntryTitle: (StoredDocument) -> String? = { _ in nil }
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
 
-    @State private var searchText = ""
-    @State private var selectedCategory: DocumentCategory? = nil
-    @State private var sortOrder: DocumentSortOrder = .recentlyAdded
+    @State private var sortMode: DocSortMode = .date
+    @State private var typeFilter: DocTypeFilter = .all
     @State private var isShowingAddSheet = false
     @State private var detailDocument: StoredDocument?
 
     private var filteredDocuments: [StoredDocument] {
         var docs = documents
 
-        if let selectedCategory {
-            docs = docs.filter { $0.category == selectedCategory }
+        switch typeFilter {
+        case .all:
+            break
+        case .standalone:
+            docs = docs.filter { $0.linkedTimelineItemIds.isEmpty }
+        case .screenshots, .photos, .files:
+            docs = docs.filter { DocReferenceType.classify($0) == typeFilter.referenceType }
         }
 
-        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if !trimmed.isEmpty {
-            docs = docs.filter { document in
-                let haystack = [
-                    document.title,
-                    document.fileName,
-                    document.notes ?? "",
-                    document.category.displayName,
-                    document.tags.map(\.displayName).joined(separator: " ")
-                ].joined(separator: " ").lowercased()
-                return haystack.contains(trimmed)
-            }
-        }
-
-        switch sortOrder {
-        case .recentlyAdded:
+        switch sortMode {
+        case .date:
             docs.sort { $0.importedAt > $1.importedAt }
-        case .oldestFirst:
-            docs.sort { $0.importedAt < $1.importedAt }
-        case .titleAZ:
+        case .name:
             docs.sort { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
-        case .category:
-            docs.sort { $0.category.displayName < $1.category.displayName }
         }
 
         return docs
+    }
+
+    /// Filtered documents grouped by month, preserving the date-sorted order, for the
+    /// reference's "JULY 2026" month headers. Only used when sorting by date.
+    private var monthGroups: [(label: String, docs: [StoredDocument])] {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM yyyy"
+        var order: [String] = []
+        var buckets: [String: [StoredDocument]] = [:]
+        for doc in filteredDocuments {
+            let key = formatter.string(from: doc.importedAt)
+            if buckets[key] == nil {
+                order.append(key)
+                buckets[key] = []
+            }
+            buckets[key]?.append(doc)
+        }
+        return order.map { ($0, buckets[$0] ?? []) }
     }
 
     var body: some View {
@@ -60,7 +132,7 @@ struct MyDocumentsView: View {
             if documents.isEmpty {
                 emptyState
             } else {
-                filterBar
+                controls
 
                 if filteredDocuments.isEmpty {
                     filteredEmptyState
@@ -68,6 +140,13 @@ struct MyDocumentsView: View {
                     documentList
                 }
             }
+
+            HomeBottomNavigation(
+                activeTab: .documents,
+                onHome: { dismiss() },
+                onTimeline: onTimeline,
+                onInsights: onInsights
+            )
         }
         .factTrailScreenBackground()
         .navigationTitle("My documents")
@@ -129,111 +208,119 @@ struct MyDocumentsView: View {
         .padding(.bottom, 12)
     }
 
-    private var filterBar: some View {
+    private var controls: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Image(systemName: "magnifyingglass")
+            HStack(spacing: 0) {
+                Text("Sort by")
+                    .font(.system(size: 12, weight: .medium, design: .default))
                     .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
-                TextField("Search documents", text: $searchText)
-                    .textFieldStyle(.plain)
-                    .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
-                if !searchText.isEmpty {
-                    Button {
-                        searchText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
-                    }
+
+                Spacer()
+
+                HStack(spacing: 3) {
+                    sortButton(.date, label: "Date")
+                    sortButton(.name, label: "Name")
                 }
-            }
-            .padding(.vertical, 10)
-            .padding(.horizontal, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(FactTrailTheme.surface(for: colorScheme))
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1)
+                .padding(3)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(FactTrailTheme.border(for: colorScheme).opacity(0.5))
+                )
             }
 
-            HStack(spacing: 8) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        categoryChip(nil, label: "All")
-                        ForEach(DocumentCategory.allCases) { category in
-                            categoryChip(category, label: category.displayName)
-                        }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 7) {
+                    ForEach(DocTypeFilter.allCases) { filter in
+                        filterChip(filter)
                     }
                 }
-
-                Menu {
-                    ForEach(DocumentSortOrder.allCases) { order in
-                        Button {
-                            sortOrder = order
-                        } label: {
-                            if sortOrder == order {
-                                Label(order.displayName, systemImage: "checkmark")
-                            } else {
-                                Text(order.displayName)
-                            }
-                        }
-                    }
-                } label: {
-                    Image(systemName: "arrow.up.arrow.down")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
-                        .padding(.vertical, 6)
-                        .padding(.horizontal, 10)
-                        .background(
-                            Capsule().fill(FactTrailTheme.surface(for: colorScheme))
-                        )
-                        .overlay {
-                            Capsule().stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1)
-                        }
-                }
+                .padding(.bottom, 4)
             }
         }
         .padding(.horizontal, 20)
-        .padding(.bottom, 10)
+        .padding(.top, 12)
+        .padding(.bottom, 2)
     }
 
-    private func categoryChip(_ category: DocumentCategory?, label: String) -> some View {
-        let isSelected = selectedCategory == category
+    private func sortButton(_ mode: DocSortMode, label: String) -> some View {
+        let isActive = sortMode == mode
         return Button {
-            selectedCategory = category
+            sortMode = mode
         } label: {
             Text(label)
-                .font(.system(size: 12, weight: .semibold, design: .default))
-                .foregroundStyle(isSelected ? FactTrailTheme.background(for: colorScheme) : FactTrailTheme.primaryText(for: colorScheme))
-                .padding(.vertical, 6)
-                .padding(.horizontal, 12)
+                .font(.system(size: 12, weight: .medium, design: .default))
+                .foregroundStyle(isActive ? FactTrailTheme.primaryText(for: colorScheme) : FactTrailTheme.mutedText(for: colorScheme))
+                .padding(.vertical, 5)
+                .padding(.horizontal, 11)
                 .background(
-                    Capsule().fill(isSelected ? FactTrailTheme.primaryAction(for: colorScheme) : FactTrailTheme.surface(for: colorScheme))
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(isActive ? FactTrailTheme.surface(for: colorScheme) : Color.clear)
+                        .shadow(color: isActive ? .black.opacity(0.08) : .clear, radius: 2, y: 1)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func filterChip(_ filter: DocTypeFilter) -> some View {
+        let isActive = typeFilter == filter
+        let accent = FactTrailTheme.aiAccent(for: colorScheme)
+        return Button {
+            typeFilter = filter
+        } label: {
+            Text(filter.label)
+                .font(.system(size: 12, weight: .medium, design: .default))
+                .foregroundStyle(isActive ? accent : FactTrailTheme.secondaryText(for: colorScheme))
+                .padding(.vertical, 6)
+                .padding(.horizontal, 13)
+                .background(
+                    Capsule().fill(isActive ? accent.opacity(0.10) : FactTrailTheme.surface(for: colorScheme))
                 )
                 .overlay {
-                    Capsule().stroke(FactTrailTheme.border(for: colorScheme), lineWidth: isSelected ? 0 : 1)
+                    Capsule().stroke(isActive ? accent : FactTrailTheme.border(for: colorScheme), lineWidth: 1.5)
                 }
         }
         .buttonStyle(.plain)
     }
 
     private var documentList: some View {
-        ScrollView {
-            LazyVStack(spacing: 10) {
-                ForEach(filteredDocuments) { document in
-                    Button {
-                        detailDocument = document
-                    } label: {
-                        DocumentRow(document: document)
+        ScrollView(showsIndicators: false) {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                if sortMode == .date {
+                    ForEach(monthGroups, id: \.label) { group in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(group.label.uppercased())
+                                .font(.system(size: 10.5, weight: .semibold, design: .default))
+                                .tracking(0.7)
+                                .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                                .padding(.leading, 2)
+
+                            ForEach(group.docs) { document in
+                                documentRow(document)
+                            }
+                        }
+                        .padding(.bottom, 18)
                     }
-                    .buttonStyle(.plain)
+                } else {
+                    VStack(spacing: 8) {
+                        ForEach(filteredDocuments) { document in
+                            documentRow(document)
+                        }
+                    }
                 }
             }
             .padding(.horizontal, 20)
-            .padding(.top, 4)
-            .padding(.bottom, 24)
+            .padding(.top, 14)
+            .padding(.bottom, 20)
         }
+    }
+
+    private func documentRow(_ document: StoredDocument) -> some View {
+        Button {
+            detailDocument = document
+        } label: {
+            DocumentRow(document: document, linkedTitle: linkedEntryTitle(document))
+        }
+        .buttonStyle(.plain)
     }
 
     private var emptyState: some View {
@@ -272,10 +359,10 @@ struct MyDocumentsView: View {
             Image(systemName: "line.3.horizontal.decrease.circle")
                 .font(.system(size: 40, weight: .regular))
                 .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
-            Text("No matching documents")
+            Text("No documents match this filter yet")
                 .font(.system(size: 16, weight: .semibold, design: .default))
                 .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
-            Text("Try clearing the search or filter.")
+            Text("Try a different filter.")
                 .font(.system(size: 13, weight: .regular, design: .default))
                 .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
             Spacer()
@@ -286,92 +373,76 @@ struct MyDocumentsView: View {
 
 private struct DocumentRow: View {
     let document: StoredDocument
+    let linkedTitle: String?
     @Environment(\.colorScheme) private var colorScheme
 
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            thumbnail
-                .frame(width: 52, height: 52)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(FactTrailTheme.aiSoftBackground(for: colorScheme))
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1)
-                }
+    private var type: DocReferenceType { DocReferenceType.classify(document) }
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(type.color.opacity(0.12))
+                Image(systemName: type.systemImage)
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(type.color)
+            }
+            .frame(width: 42, height: 42)
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
                     Text(document.title)
-                        .font(.system(size: 16, weight: .semibold, design: .default))
+                        .font(.system(size: 13, weight: .semibold, design: .default))
                         .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
-                        .lineLimit(2)
+                        .lineLimit(1)
                     if document.isFlagged {
                         Image(systemName: "flag.fill")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(.orange)
                     }
                 }
 
                 HStack(spacing: 6) {
-                    Label(document.category.displayName, systemImage: document.category.systemImage)
-                        .labelStyle(.titleAndIcon)
-                        .font(.system(size: 11, weight: .semibold, design: .default))
-                        .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
-                        .padding(.vertical, 3)
-                        .padding(.horizontal, 8)
-                        .background(
-                            Capsule().fill(FactTrailTheme.aiSoftBackground(for: colorScheme))
-                        )
-                    Text(DateFormatter.factTrailDateTime.string(from: document.importedAt))
-                        .font(.system(size: 11, weight: .regular, design: .default))
-                        .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
-                }
+                    Text(type.label.uppercased())
+                        .font(.system(size: 9.5, weight: .semibold, design: .default))
+                        .tracking(0.4)
+                        .foregroundStyle(type.color)
+                        .padding(.vertical, 2)
+                        .padding(.horizontal, 7)
+                        .background(Capsule().fill(type.color.opacity(0.12)))
 
-                if let notes = document.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
-                    Text(notes)
-                        .font(.system(size: 12, weight: .regular, design: .default))
-                        .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
-                        .lineLimit(2)
+                    if let linkedTitle {
+                        Text("Linked · \(linkedTitle)")
+                            .font(.system(size: 11, weight: .regular, design: .default))
+                            .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                            .lineLimit(1)
+                    } else {
+                        Text("Standalone — no linked entry")
+                            .font(.system(size: 11, weight: .regular, design: .default))
+                            .italic()
+                            .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme).opacity(0.75))
+                            .lineLimit(1)
+                    }
                 }
             }
 
-            Spacer(minLength: 0)
+            Spacer(minLength: 4)
 
             Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
-                .padding(.top, 4)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme).opacity(0.35))
         }
-        .padding(12)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(FactTrailTheme.surface(for: colorScheme))
+                .shadow(color: .black.opacity(colorScheme == .dark ? 0.18 : 0.06), radius: 4, y: 2)
         )
         .overlay {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1)
-        }
-    }
-
-    @ViewBuilder
-    private var thumbnail: some View {
-        if let data = document.thumbnailData, let uiImage = UIImage(data: data) {
-            Image(uiImage: uiImage)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        } else if document.fileType == .image, let url = document.localFileURL, let uiImage = UIImage(contentsOfFile: url.path) {
-            Image(uiImage: uiImage)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        } else {
-            Image(systemName: document.fileType.systemImage)
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
         }
     }
 }

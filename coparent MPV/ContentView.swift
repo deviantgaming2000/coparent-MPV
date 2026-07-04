@@ -180,6 +180,11 @@ struct ContentView: View {
                         },
                         onDeleteDocument: { document in
                             deleteDocument(document)
+                        },
+                        onTimeline: { path = [.timeline] },
+                        onInsights: { path = [.insights] },
+                        linkedEntryTitle: { document in
+                            linkedEntryTitle(for: document)
                         }
                     )
                 }
@@ -500,6 +505,29 @@ struct ContentView: View {
         storedDocuments
             .filter { $0.linkedTimelineItemIds.contains(id) }
             .sorted { $0.importedAt > $1.importedAt }
+    }
+
+    /// Resolves the title of the first timeline entry a document is linked to, for the
+    /// documents list's "Linked · <entry>" label. Returns nil when the document is standalone.
+    private func linkedEntryTitle(for document: StoredDocument) -> String? {
+        guard !document.linkedTimelineItemIds.isEmpty else { return nil }
+        let incidentsByExchangeID = Dictionary(
+            uniqueKeysWithValues: incidents.compactMap { incident -> (UUID, Incident)? in
+                guard let exchangeRecordID = incident.exchangeRecordID else { return nil }
+                return (exchangeRecordID, incident)
+            }
+        )
+        let items: [TimelineItem] =
+            incidents.filter { $0.exchangeRecordID == nil }.map(TimelineItem.incident)
+            + exchangeRecords.map { TimelineItem.exchangeRecord($0, incidentsByExchangeID[$0.id]) }
+            + checkIns.map(TimelineItem.checkIn)
+        let byID = Dictionary(items.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        for linkedID in document.linkedTimelineItemIds {
+            if let item = byID[linkedID] {
+                return item.title
+            }
+        }
+        return nil
     }
 
     /// Normalized view of every logged entry, fed to the AI/heuristic insights engine.
@@ -1620,7 +1648,7 @@ private struct HomeActionCard: View {
     }
 }
 
-private struct HomeBottomNavigation: View {
+struct HomeBottomNavigation: View {
     var activeTab: BottomNavTab = .home
     var onHome: () -> Void = {}
     let onTimeline: () -> Void
@@ -1647,8 +1675,8 @@ private struct HomeBottomNavigation: View {
     }
 }
 
-private enum BottomNavTab {
-    case home, timeline, insights
+enum BottomNavTab {
+    case home, timeline, insights, documents
 }
 
 private struct HomeBottomNavItem: View {
