@@ -20,6 +20,7 @@ struct ContentView: View {
     @State private var pendingExchangeRecordID: UUID?
     @State private var saveErrorMessage: String?
     @State private var shouldShowNamePrompt = false
+    @State private var isShowingSettings = false
     @State private var shouldShowResetConfirmation = false
     @State private var backupExportFile: BackupExportFile?
     @State private var isShowingRestorePicker = false
@@ -49,7 +50,6 @@ struct ContentView: View {
                         exchangeRecords: exchangeRecords,
                         checkIns: checkIns,
                         userName: userName,
-                        selectedAppearance: appearanceBinding,
                         onExchangeRecord: { path.append(.exchangeRecord) },
                         onDocumentSomething: { path.append(.entry) },
                         onOpenDocuments: { path.append(.documents) },
@@ -57,9 +57,7 @@ struct ContentView: View {
                         onViewTimeline: { path.append(.timeline) },
                         onViewInsights: { path.append(.insights) },
                         onEditName: { shouldShowNamePrompt = true },
-                        onResetData: { shouldShowResetConfirmation = true },
-                        onBackup: exportBackup,
-                        onRestore: { isShowingRestorePicker = true },
+                        onOpenMenu: { isShowingSettings = true },
                         onOpenIncident: { incident in
                             path.append(.edit(incident.id))
                         },
@@ -329,6 +327,31 @@ struct ContentView: View {
         }
         .alert(item: $dataTransferMessage) { message in
             Alert(title: Text(message.title), message: Text(message.body), dismissButton: .default(Text("OK")))
+        }
+        .sheet(isPresented: $isShowingSettings) {
+            SettingsView(
+                onExport: {
+                    isShowingSettings = false
+                    runAfterSheetDismiss { exportBackup() }
+                },
+                onRestore: {
+                    isShowingSettings = false
+                    runAfterSheetDismiss { isShowingRestorePicker = true }
+                },
+                onReset: {
+                    isShowingSettings = false
+                    runAfterSheetDismiss { shouldShowResetConfirmation = true }
+                }
+            )
+        }
+    }
+
+    /// Presents a follow-up sheet/alert only after the settings sheet has finished
+    /// dismissing — presenting during the dismissal makes SwiftUI drop it.
+    private func runAfterSheetDismiss(_ action: @escaping () -> Void) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(0.45))
+            action()
         }
     }
 
@@ -1217,7 +1240,6 @@ private struct HomeView: View {
     let exchangeRecords: [ExchangeRecord]
     let checkIns: [CheckIn]
     let userName: String
-    @Binding var selectedAppearance: FactTrailAppearance
     let onExchangeRecord: () -> Void
     let onDocumentSomething: () -> Void
     let onOpenDocuments: () -> Void
@@ -1225,9 +1247,7 @@ private struct HomeView: View {
     let onViewTimeline: () -> Void
     var onViewInsights: () -> Void = {}
     let onEditName: () -> Void
-    var onResetData: () -> Void = {}
-    var onBackup: () -> Void = {}
-    var onRestore: () -> Void = {}
+    var onOpenMenu: () -> Void = {}
     let onOpenIncident: (Incident) -> Void
     let onOpenExchangeRecord: (ExchangeRecord) -> Void
     var onPickUp: () -> Void = {}
@@ -1323,23 +1343,8 @@ private struct HomeView: View {
 
     private var header: some View {
         HStack {
-            Menu {
-                Button("Edit Name", action: onEditName)
-
-                Picker("Theme", selection: $selectedAppearance) {
-                    ForEach(FactTrailAppearance.allCases) { appearance in
-                        Text(appearance.rawValue).tag(appearance)
-                    }
-                }
-
-                Divider()
-
-                Button("Back up your records", systemImage: "square.and.arrow.up", action: onBackup)
-                Button("Restore from backup", systemImage: "square.and.arrow.down", action: onRestore)
-
-                Divider()
-
-                Button("Reset All Data", systemImage: "trash", role: .destructive, action: onResetData)
+            Button {
+                onOpenMenu()
             } label: {
                 Image("codoc-menu")
                     .renderingMode(.template)
