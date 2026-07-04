@@ -58,7 +58,8 @@ struct ContentView: View {
                         },
                         onOpenExchangeRecord: { _ in
                             path.append(.timeline)
-                        }
+                        },
+                        onPickUp: { path.append(.pickup) }
                     )
                 } else {
                     OnboardingView {
@@ -186,6 +187,13 @@ struct ContentView: View {
                         onInsights: { path = [.insights] },
                         linkedEntryTitle: { document in
                             linkedEntryTitle(for: document)
+                        }
+                    )
+                case .pickup:
+                    PickUpView(
+                        incidents: incidents.filter { $0.exchangeRecordID == nil && $0.needsMoreDetail },
+                        onOpenIncident: { incident in
+                            path.append(.edit(incident.id))
                         }
                     )
                 }
@@ -766,6 +774,7 @@ private enum AppRoute: Hashable {
     case exchangeRecord
     case edit(UUID)
     case documents
+    case pickup
 }
 
 private enum EntryMode {
@@ -1086,7 +1095,23 @@ private struct HomeView: View {
     var onResetData: () -> Void = {}
     let onOpenIncident: (Incident) -> Void
     let onOpenExchangeRecord: (ExchangeRecord) -> Void
+    var onPickUp: () -> Void = {}
     @Environment(\.colorScheme) private var colorScheme
+
+    /// Standalone entries that are thin enough to invite strengthening. Drives the
+    /// "Pick up where you left off" card's count and visibility.
+    private var incidentsNeedingDetail: [Incident] {
+        incidents
+            .filter { $0.exchangeRecordID == nil && $0.needsMoreDetail }
+            .sorted { $0.incidentDate > $1.incidentDate }
+    }
+
+    private var pickUpSubtitle: String {
+        let count = incidentsNeedingDetail.count
+        return count == 1
+            ? "1 entry could use a little more detail."
+            : "\(count) entries could use a little more detail."
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1138,14 +1163,16 @@ private struct HomeView: View {
                             action: onOpenDocuments
                         )
 
-                        HomeActionCard(
-                            iconAssetName: "codoc-info-circle",
-                            title: "Pick up where you left off",
-                            subtitle: "Two entries could use a little more detail.",
-                            badgeText: "2",
-                            style: .standard,
-                            action: onDocumentSomething
-                        )
+                        if !incidentsNeedingDetail.isEmpty {
+                            HomeActionCard(
+                                iconAssetName: "codoc-info-circle",
+                                title: "Pick up where you left off",
+                                subtitle: pickUpSubtitle,
+                                badgeText: "\(incidentsNeedingDetail.count)",
+                                style: .standard,
+                                action: onPickUp
+                            )
+                        }
                     }
                 }
                 .padding(.horizontal, 22)
@@ -1538,6 +1565,172 @@ private enum HomeActionCardStyle {
     case primary
     case checkIn
     case standard
+}
+
+// MARK: - Pick up where you left off
+
+/// Lists the standalone entries that are still thin, so the user can open each one and
+/// add the missing specifics. The list is passed in already filtered; when the user
+/// strengthens an entry it drops out on the next appearance, and the home card's count
+/// updates to match.
+private struct PickUpView: View {
+    let incidents: [Incident]
+    let onOpenIncident: (Incident) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+
+    private let entryColor = Color(red: 0x2F / 255, green: 0x5D / 255, blue: 0x8C / 255)
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+
+            if incidents.isEmpty {
+                emptyState
+            } else {
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("A few entries could use a little more detail. Strengthening them takes a minute and makes your record more complete.")
+                            .font(.system(size: 13, weight: .regular, design: .default))
+                            .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.bottom, 2)
+
+                        ForEach(incidents) { incident in
+                            Button {
+                                onOpenIncident(incident)
+                            } label: {
+                                card(incident)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+                    .padding(.bottom, 24)
+                }
+            }
+        }
+        .factTrailScreenBackground()
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var header: some View {
+        HStack(alignment: .center) {
+            Button {
+                dismiss()
+            } label: {
+                Label("Back", systemImage: "chevron.left")
+                    .labelStyle(.titleAndIcon)
+                    .font(.system(size: 17, weight: .medium, design: .default))
+            }
+            .foregroundStyle(FactTrailTheme.primaryAction(for: colorScheme))
+
+            Spacer()
+
+            Text("Pick up where you left off")
+                .font(.system(size: 17, weight: .semibold, design: .default))
+                .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+
+            Spacer()
+
+            Color.clear.frame(width: 40, height: 1)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+        .padding(.bottom, 12)
+    }
+
+    private func card(_ incident: Incident) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(entryColor)
+                .frame(width: 3)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Text(categoryLabel(incident))
+                        .font(.system(size: 9.5, weight: .semibold, design: .default))
+                        .tracking(0.4)
+                        .foregroundStyle(entryColor)
+                        .padding(.vertical, 2)
+                        .padding(.horizontal, 7)
+                        .background(Capsule().fill(entryColor.opacity(0.12)))
+                    Text(incident.incidentDate.formatted(date: .abbreviated, time: .omitted))
+                        .font(.system(size: 11, weight: .regular, design: .default))
+                        .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                }
+
+                Text(displayTitle(incident))
+                    .font(.system(size: 15, weight: .semibold, design: .default))
+                    .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                    .lineLimit(2)
+
+                HStack(alignment: .top, spacing: 5) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 10, weight: .semibold))
+                        .padding(.top, 1)
+                    Text(incident.detailSuggestion)
+                        .font(.system(size: 12, weight: .medium, design: .default))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme).opacity(0.4))
+                .padding(.top, 2)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(FactTrailTheme.surface(for: colorScheme))
+                .shadow(color: .black.opacity(colorScheme == .dark ? 0.18 : 0.06), radius: 4, y: 2)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1)
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Spacer()
+            Image(systemName: "checkmark.circle")
+                .font(.system(size: 46, weight: .regular))
+                .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+            Text("You're all caught up.")
+                .font(.system(size: 18, weight: .semibold, design: .default))
+                .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+            Text("Every entry has the detail it needs.")
+                .font(.system(size: 13, weight: .regular, design: .default))
+                .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func categoryLabel(_ incident: Incident) -> String {
+        let trimmed = incident.category.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (trimmed.isEmpty ? "Entry" : trimmed).uppercased()
+    }
+
+    private func displayTitle(_ incident: Incident) -> String {
+        let notes = incident.originalNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let firstLine = notes.split(separator: "\n").first.map(String.init), !firstLine.isEmpty {
+            return firstLine
+        }
+        let category = incident.category.trimmingCharacters(in: .whitespacesAndNewlines)
+        return category.isEmpty ? "Untitled entry" : category
+    }
 }
 
 private struct HomeActionCard: View {

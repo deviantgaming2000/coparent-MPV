@@ -169,6 +169,40 @@ struct Incident: Identifiable, Codable, Equatable {
     }
 }
 
+extension Incident {
+    /// The core specifics that turn a quick note into a useful record. Kept intentionally
+    /// simple and field-based so the "Pick up where you left off" count responds directly
+    /// to what the user edits — no stale AI score that could keep an entry flagged after
+    /// they've added detail.
+    var missingDetailFields: [String] {
+        var missing: [String] = []
+        if location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            missing.append("the location")
+        }
+        if peopleInvolved.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            missing.append("who was involved")
+        }
+        if originalNotes.trimmingCharacters(in: .whitespacesAndNewlines).count < 40 {
+            missing.append("more about what happened")
+        }
+        return missing
+    }
+
+    /// True when the entry is thin enough to invite the user to strengthen it.
+    var needsMoreDetail: Bool {
+        missingDetailFields.count >= 2
+    }
+
+    /// A short, human prompt describing what would strengthen this entry.
+    var detailSuggestion: String {
+        let fields = missingDetailFields
+        guard !fields.isEmpty else {
+            return "Add a little more detail to strengthen this record."
+        }
+        return "Add \(ListFormatter.localizedString(byJoining: fields))."
+    }
+}
+
 struct EvidenceAttachment: Identifiable, Codable, Equatable {
     let id: UUID
     let fileName: String
