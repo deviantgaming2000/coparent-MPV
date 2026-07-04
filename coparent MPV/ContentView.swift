@@ -48,6 +48,7 @@ struct ContentView: View {
                         onOpenDocuments: { path.append(.documents) },
                         onCheckIn: { shouldShowCheckInSheet = true },
                         onViewTimeline: { path.append(.timeline) },
+                        onViewInsights: { path.append(.insights) },
                         onEditName: { shouldShowNamePrompt = true },
                         onOpenIncident: { incident in
                             path.append(.edit(incident.id))
@@ -131,7 +132,13 @@ struct ContentView: View {
                         },
                         onDeleteAttachment: { document in
                             deleteDocument(document)
-                        }
+                        },
+                        onInsights: { path = [.insights] }
+                    )
+                case .insights:
+                    InsightsScreenView(
+                        onHome: { path = [] },
+                        onTimeline: { path = [.timeline] }
                     )
                 case .exchangeRecord:
                     ExchangeRecordEntryView(
@@ -682,6 +689,7 @@ private enum AppRoute: Hashable {
     case entryFromCheckIn
     case review
     case timeline
+    case insights
     case exchangeRecord
     case edit(UUID)
     case documents
@@ -1000,6 +1008,7 @@ private struct HomeView: View {
     let onOpenDocuments: () -> Void
     let onCheckIn: () -> Void
     let onViewTimeline: () -> Void
+    var onViewInsights: () -> Void = {}
     let onEditName: () -> Void
     let onOpenIncident: (Incident) -> Void
     let onOpenExchangeRecord: (ExchangeRecord) -> Void
@@ -1070,7 +1079,7 @@ private struct HomeView: View {
                 .padding(.bottom, 18)
             }
 
-            HomeBottomNavigation(onTimeline: onViewTimeline)
+            HomeBottomNavigation(activeTab: .home, onTimeline: onViewTimeline, onInsights: onViewInsights)
         }
         .background(HomePalette.background(for: colorScheme).ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
@@ -3299,6 +3308,7 @@ private struct TimelineView: View {
     let onAddLinkedNote: (TimelineItem, String) -> Void
     let onAttachImageData: (Data, String, String, DocumentCategory) -> Void
     let onDeleteAttachment: (StoredDocument) -> Void
+    var onInsights: () -> Void = {}
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     @State private var selectedStyle: TimelineDisplayStyle = .branch
@@ -3405,7 +3415,8 @@ private struct TimelineView: View {
             HomeBottomNavigation(
                 activeTab: .timeline,
                 onHome: { dismiss() },
-                onTimeline: {}
+                onTimeline: {},
+                onInsights: onInsights
             )
         }
         .factTrailScreenBackground()
@@ -5008,6 +5019,625 @@ private extension TimelineItem {
             return FactTrailTheme.primaryAction(for: colorScheme).opacity(0.76)
         case .checkIn:
             return FactTrailTheme.aiAccent(for: colorScheme)
+        }
+    }
+}
+
+// MARK: - Insights
+
+private enum InsightsDemoMode {
+    case withPatterns, empty
+}
+
+private enum InsightType {
+    case concern, affirm
+}
+
+private enum InsightVisual {
+    case strip(dates: [String], color: Color)
+    case tally(values: [Int], labels: [String], color: Color)
+    case none
+}
+
+private struct InsightSupport: Identifiable {
+    let id = UUID()
+    let color: Color
+    let text: String
+    let date: String
+}
+
+/// A detected pattern shown on the Insights screen. In the shipped product these
+/// are produced by the AI analysis pass over the timeline; `sampleInsights` below
+/// is placeholder/preview data used until that pass is wired up.
+private struct Insight: Identifiable {
+    let id = UUID()
+    let type: InsightType
+    let visual: InsightVisual
+    let iconSystemName: String
+    let eyebrow: String
+    let headline: String
+    let body: String
+    let tag: String
+    let firstSeen: String
+    let lastSeen: String
+    let occurrences: Int
+    let supporting: [InsightSupport]
+}
+
+private let sampleInsights: [Insight] = [
+    Insight(
+        type: .concern,
+        visual: .strip(dates: ["May 21", "Jun 4", "Jun 18", "Jun 25"], color: Color(hex: 0xD97706)),
+        iconSystemName: "clock",
+        eyebrow: "Timing pattern",
+        headline: "Drop-offs have been consistently late",
+        body: "Over the past six weeks, drop-offs have run 15–25 minutes behind the scheduled time in 4 of 5 exchanges — a shift from the on-time pattern in the months before.",
+        tag: "late_arrival",
+        firstSeen: "May 21", lastSeen: "Jun 25", occurrences: 4,
+        supporting: [
+            InsightSupport(color: Color(hex: 0x2F5D8C), text: "Late drop-off at school", date: "Jun 18"),
+            InsightSupport(color: Color(hex: 0x4F8F8B), text: "Check-in — school pickup", date: "Jun 25"),
+            InsightSupport(color: Color(hex: 0x2F5D8C), text: "Late arrival, no notice", date: "May 21")
+        ]
+    ),
+    Insight(
+        type: .concern,
+        visual: .tally(values: [1, 0, 1, 2, 1, 3], labels: ["Feb", "Mar", "Apr", "May", "Jun", "Jul"], color: Color(hex: 0x2F5D8C)),
+        iconSystemName: "doc.text",
+        eyebrow: "Compliance pattern",
+        headline: "Service authorizations have gone unsigned",
+        body: "Three service authorizations — speech therapy, the June PCSP, and a follow-up form — have been declined or left unsigned in the past two months, more than in the prior year combined.",
+        tag: "authorization_refused",
+        firstSeen: "May 7", lastSeen: "Jul 2", occurrences: 3,
+        supporting: [
+            InsightSupport(color: Color(hex: 0x2F5D8C), text: "Speech therapy authorization refused", date: "May 7"),
+            InsightSupport(color: Color(hex: 0x059669), text: "PCSP unsigned — screenshot saved", date: "Jun 12")
+        ]
+    ),
+    Insight(
+        type: .affirm,
+        visual: .none,
+        iconSystemName: "heart",
+        eyebrow: "Your consistency",
+        headline: "You've handled every appointment this month",
+        body: "You've independently scheduled and attended all of your child's medical and therapy appointments this month, and logged three additional check-in calls to coordinate care.",
+        tag: "mediation_related",
+        firstSeen: "Jun 3", lastSeen: "Jul 2", occurrences: 5,
+        supporting: [
+            InsightSupport(color: Color(hex: 0x4F8F8B), text: "EDCM — Conciliation Services", date: "Jun 3"),
+            InsightSupport(color: Color(hex: 0x4F8F8B), text: "Check-in — doctor/therapy", date: "Jun 20")
+        ]
+    )
+]
+
+private func insightAccent(_ type: InsightType, _ colorScheme: ColorScheme) -> Color {
+    type == .concern ? Color(hex: 0xD97706) : FactTrailTheme.aiAccent(for: colorScheme)
+}
+
+private struct InsightsScreenView: View {
+    let onHome: () -> Void
+    let onTimeline: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+
+    @State private var demoMode: InsightsDemoMode = .withPatterns
+    @State private var index = 0
+    @State private var dragOffset: CGFloat = 0
+    @State private var expandedHistoryID: UUID?
+
+    private let insights = sampleInsights
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            demoToggle
+
+            if demoMode == .empty {
+                emptyState
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        introBlock
+                        cardStack
+                        navDots
+                        historySection
+                        Color.clear.frame(height: 12)
+                    }
+                }
+                .scrollIndicators(.hidden)
+            }
+
+            HomeBottomNavigation(
+                activeTab: .insights,
+                onHome: { dismiss() },
+                onTimeline: onTimeline,
+                onInsights: {}
+            )
+        }
+        .factTrailScreenBackground()
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var header: some View {
+        HStack {
+            Button { dismiss() } label: {
+                Label("Back", systemImage: "chevron.left")
+                    .labelStyle(.titleAndIcon)
+                    .font(.system(size: 17, weight: .medium, design: .default))
+            }
+            .foregroundStyle(FactTrailTheme.primaryAction(for: colorScheme))
+
+            Spacer()
+            Text("Insights")
+                .font(.system(size: 20, weight: .semibold, design: .default))
+                .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+            Spacer()
+            Color.clear.frame(width: 64, height: 1)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+    }
+
+    private var demoToggle: some View {
+        HStack(spacing: 6) {
+            demoButton("With patterns", mode: .withPatterns)
+            demoButton("Not enough data", mode: .empty)
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 8)
+    }
+
+    private func demoButton(_ title: String, mode: InsightsDemoMode) -> some View {
+        let active = demoMode == mode
+        return Button {
+            withAnimation(.easeOut(duration: 0.2)) {
+                demoMode = mode
+                index = 0
+                dragOffset = 0
+            }
+        } label: {
+            Text(title)
+                .font(.system(size: 10.5, weight: .medium, design: .default))
+                .foregroundStyle(active ? FactTrailTheme.aiAccent(for: colorScheme) : FactTrailTheme.mutedText(for: colorScheme))
+                .padding(.vertical, 5)
+                .padding(.horizontal, 11)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(active ? FactTrailTheme.aiAccent(for: colorScheme).opacity(0.10) : FactTrailTheme.surface(for: colorScheme))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .strokeBorder(active ? FactTrailTheme.aiAccent(for: colorScheme) : FactTrailTheme.border(for: colorScheme), lineWidth: 1)
+                        }
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var introBlock: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                LocationPulseDot(color: FactTrailTheme.aiAccent(for: colorScheme))
+                Text("BASED ON YOUR RECORDS")
+                    .font(.system(size: 10.5, weight: .semibold, design: .default))
+                    .tracking(0.8)
+                    .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+            }
+            Text("We looked over what's been logged and noticed a few consistencies worth your attention — including some of your own.")
+                .font(.system(size: 13.5, weight: .regular, design: .default))
+                .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 5) {
+                Image(systemName: "waveform.path.ecg")
+                    .font(.system(size: 10, weight: .semibold))
+                Text("\(insights.count) patterns found")
+                    .font(.system(size: 11.5, weight: .semibold, design: .default))
+            }
+            .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+            .padding(.vertical, 4)
+            .padding(.horizontal, 11)
+            .background(
+                Capsule().fill(FactTrailTheme.aiAccent(for: colorScheme).opacity(0.09))
+                    .overlay { Capsule().strokeBorder(FactTrailTheme.aiAccent(for: colorScheme).opacity(0.2), lineWidth: 1) }
+            )
+            .padding(.top, 4)
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 12)
+    }
+
+    private var cardStack: some View {
+        ZStack {
+            ForEach(visiblePositions.reversed(), id: \.self) { p in
+                let insight = insights[index + p]
+                InsightCardView(insight: insight, onSupportTap: onTimeline)
+                    .scaleEffect(p == 0 ? 1 : (p == 1 ? 0.97 : 0.94))
+                    .offset(y: p == 0 ? 0 : (p == 1 ? 8 : 16))
+                    .opacity(p == 0 ? 1 : (p == 1 ? 0.85 : 0.6))
+                    .offset(x: p == 0 ? dragOffset : 0)
+                    .rotationEffect(.degrees(p == 0 ? Double(dragOffset / 20) : 0))
+                    .zIndex(Double(3 - p))
+                    .gesture(p == 0 ? dragGesture : nil)
+            }
+        }
+        .frame(height: 400)
+        .padding(.horizontal, 20)
+        .padding(.bottom, 6)
+    }
+
+    private var visiblePositions: [Int] {
+        (0..<3).filter { index + $0 < insights.count }
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture()
+            .onChanged { value in
+                if abs(value.translation.width) > abs(value.translation.height) {
+                    dragOffset = value.translation.width
+                }
+            }
+            .onEnded { value in
+                let threshold: CGFloat = 80
+                let w = value.translation.width
+                if w < -threshold && index < insights.count - 1 {
+                    fling(to: -700, then: 1)
+                } else if w > threshold && index > 0 {
+                    fling(to: 700, then: -1)
+                } else {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.72)) { dragOffset = 0 }
+                }
+            }
+    }
+
+    private func fling(to offset: CGFloat, then delta: Int) {
+        withAnimation(.easeOut(duration: 0.22)) { dragOffset = offset }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+            index += delta
+            dragOffset = 0
+        }
+    }
+
+    private var navDots: some View {
+        HStack(spacing: 6) {
+            ForEach(insights.indices, id: \.self) { i in
+                Capsule()
+                    .fill(i == index ? FactTrailTheme.aiAccent(for: colorScheme) : FactTrailTheme.border(for: colorScheme))
+                    .frame(width: i == index ? 16 : 6, height: 6)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+    }
+
+    private var historySection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("ALL PATTERNS")
+                .font(.system(size: 10.5, weight: .semibold, design: .default))
+                .tracking(0.8)
+                .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                .padding(.leading, 2)
+
+            ForEach(insights) { insight in
+                InsightHistoryRow(
+                    insight: insight,
+                    isOpen: expandedHistoryID == insight.id,
+                    onToggle: {
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            expandedHistoryID = expandedHistoryID == insight.id ? nil : insight.id
+                        }
+                    },
+                    onView: onTimeline
+                )
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 4)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 0) {
+            Spacer()
+            ZStack {
+                Circle().fill(FactTrailTheme.aiAccent(for: colorScheme).opacity(0.10))
+                Image(systemName: "waveform.path.ecg")
+                    .font(.system(size: 24, weight: .regular))
+                    .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+            }
+            .frame(width: 56, height: 56)
+            .padding(.bottom, 18)
+            Text("Still watching.")
+                .font(.system(size: 16, weight: .bold, design: .default))
+                .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                .padding(.bottom, 8)
+            Text("We'll let you know when something stands out.")
+                .font(.system(size: 13, weight: .regular, design: .default))
+                .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 260)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct InsightCardView: View {
+    let insight: Insight
+    let onSupportTap: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var accent: Color { insightAccent(insight.type, colorScheme) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(accent.opacity(0.14))
+                    Image(systemName: insight.iconSystemName)
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(accent)
+                }
+                .frame(width: 40, height: 40)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(insight.eyebrow.uppercased())
+                        .font(.system(size: 10, weight: .bold, design: .default))
+                        .tracking(0.7)
+                        .foregroundStyle(accent)
+                    Text(insight.headline)
+                        .font(.system(size: 16.5, weight: .bold, design: .default))
+                        .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.bottom, 14)
+
+            Text(insight.body)
+                .font(.system(size: 13, weight: .regular, design: .default))
+                .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 14)
+
+            insightVisual
+                .padding(.bottom, insightHasVisual ? 16 : 0)
+
+            Text("SUPPORTING ENTRIES")
+                .font(.system(size: 10.5, weight: .semibold, design: .default))
+                .tracking(0.6)
+                .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                .padding(.bottom, 8)
+
+            VStack(spacing: 6) {
+                ForEach(insight.supporting) { s in
+                    Button(action: onSupportTap) {
+                        HStack(spacing: 8) {
+                            Circle().fill(s.color).frame(width: 7, height: 7)
+                            Text(s.text)
+                                .font(.system(size: 11.5, weight: .medium, design: .default))
+                                .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                                .lineLimit(1)
+                            Spacer(minLength: 6)
+                            Text(s.date)
+                                .font(.system(size: 10.5, weight: .regular, design: .default))
+                                .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(FactTrailTheme.border(for: colorScheme).opacity(0.35))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            Rectangle()
+                .fill(FactTrailTheme.border(for: colorScheme))
+                .frame(height: 1)
+                .padding(.top, 12)
+                .padding(.bottom, 10)
+            Text("Not a legal conclusion — see the full pattern below.")
+                .font(.system(size: 10, weight: .regular, design: .default))
+                .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .factTrailGlassCard(cornerRadius: 20)
+    }
+
+    private var insightHasVisual: Bool {
+        if case .none = insight.visual { return false }
+        return true
+    }
+
+    @ViewBuilder
+    private var insightVisual: some View {
+        switch insight.visual {
+        case .strip(let dates, let color):
+            InsightStripView(dates: dates, color: color)
+        case .tally(let values, let labels, let color):
+            InsightTallyView(values: values, labels: labels, color: color)
+        case .none:
+            EmptyView()
+        }
+    }
+}
+
+private struct InsightStripView: View {
+    let dates: [String]
+    let color: Color
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("WHEN IT HAPPENED")
+                .font(.system(size: 10, weight: .semibold, design: .default))
+                .tracking(0.5)
+                .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(FactTrailTheme.border(for: colorScheme))
+                        .frame(height: 3)
+                        .frame(maxHeight: .infinity)
+                    ForEach(dates.indices, id: \.self) { i in
+                        let pct = dates.count == 1 ? 0.5 : CGFloat(i) / CGFloat(dates.count - 1)
+                        Circle()
+                            .fill(color)
+                            .frame(width: 10, height: 10)
+                            .overlay { Circle().strokeBorder(FactTrailTheme.surface(for: colorScheme), lineWidth: 2) }
+                            .position(x: max(5, min(geo.size.width - 5, pct * geo.size.width)), y: geo.size.height / 2)
+                    }
+                }
+            }
+            .frame(height: 12)
+
+            HStack {
+                Text(dates.first ?? "")
+                Spacer()
+                Text(dates.last ?? "")
+            }
+            .font(.system(size: 9.5, weight: .regular, design: .default))
+            .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+        }
+    }
+}
+
+private struct InsightTallyView: View {
+    let values: [Int]
+    let labels: [String]
+    let color: Color
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        let maxValue = max(values.max() ?? 1, 1)
+        VStack(alignment: .leading, spacing: 6) {
+            Text("BY MONTH")
+                .font(.system(size: 10, weight: .semibold, design: .default))
+                .tracking(0.5)
+                .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+
+            HStack(alignment: .bottom, spacing: 5) {
+                ForEach(values.indices, id: \.self) { i in
+                    let ratio = max(CGFloat(values[i]) / CGFloat(maxValue), 0.12)
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(values[i] > 0 ? color : color.opacity(0.16))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 46 * ratio)
+                }
+            }
+            .frame(height: 46, alignment: .bottom)
+
+            HStack(spacing: 5) {
+                ForEach(labels.indices, id: \.self) { i in
+                    Text(labels[i])
+                        .font(.system(size: 8.5, weight: .regular, design: .default))
+                        .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                        .frame(maxWidth: .infinity)
+                }
+            }
+        }
+    }
+}
+
+private struct InsightHistoryRow: View {
+    let insight: Insight
+    let isOpen: Bool
+    let onToggle: () -> Void
+    let onView: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var dotColor: Color {
+        switch insight.visual {
+        case .strip(_, let color): return color
+        case .tally(_, _, let color): return color
+        case .none: return insightAccent(insight.type, colorScheme)
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Button(action: onToggle) {
+                HStack(spacing: 10) {
+                    Circle().fill(dotColor).frame(width: 8, height: 8)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(insight.headline)
+                            .font(.system(size: 12.5, weight: .semibold, design: .default))
+                            .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                            .lineLimit(1)
+                        Text("First seen \(insight.firstSeen) · Last seen \(insight.lastSeen)")
+                            .font(.system(size: 11, weight: .regular, design: .default))
+                            .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                    }
+                    Spacer(minLength: 6)
+                    Text("\(insight.occurrences)×")
+                        .font(.system(size: 10.5, weight: .semibold, design: .default))
+                        .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                        .padding(.vertical, 3)
+                        .padding(.horizontal, 8)
+                        .background(Capsule().fill(FactTrailTheme.border(for: colorScheme).opacity(0.5)))
+                }
+                .padding(10)
+            }
+            .buttonStyle(.plain)
+
+            if isOpen {
+                VStack(alignment: .leading, spacing: 10) {
+                    insightVisual
+                    Button(action: onView) {
+                        Text("View entries in timeline")
+                            .font(.system(size: 12, weight: .semibold, design: .default))
+                            .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+                            .frame(maxWidth: .infinity)
+                            .padding(9)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(FactTrailTheme.aiAccent(for: colorScheme).opacity(0.08))
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .strokeBorder(FactTrailTheme.aiAccent(for: colorScheme).opacity(0.3), lineWidth: 1)
+                                    }
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(FactTrailTheme.border(for: colorScheme).opacity(0.22))
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(FactTrailTheme.surface(for: colorScheme))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(FactTrailTheme.border(for: colorScheme), lineWidth: 1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var insightVisual: some View {
+        switch insight.visual {
+        case .strip(let dates, let color):
+            InsightStripView(dates: dates, color: color)
+        case .tally(let values, let labels, let color):
+            InsightTallyView(values: values, labels: labels, color: color)
+        case .none:
+            Text("No new entries recently — last one was \(insight.lastSeen).")
+                .font(.system(size: 10.5, weight: .regular, design: .default))
+                .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
         }
     }
 }
