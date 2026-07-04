@@ -110,51 +110,55 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) {
+                VStack(spacing: 0) {
                     profileRow
+                        .padding(.horizontal, 20)
+                        .padding(.top, 6)
+                        .padding(.bottom, 16)
 
-                    settingsCard {
+                    fullDivider
+
+                    menuSection {
                         SettingsRow(systemImage: "person.2", label: "My people", destination: MyPeopleView())
-                        rowDivider
-                        SettingsRow(systemImage: "person.crop.circle", label: "Account", destination: ComingSoonView(
+                        SettingsRow(systemImage: "person", label: "Account", destination: ComingSoonView(
                             systemImage: "person.crop.circle",
                             title: "Account",
                             message: "You're using Coparo on this device. Signing in with Apple — so your records back up and sync across your devices — is coming soon."
                         ))
                     }
 
-                    settingsCard {
+                    fullDivider
+
+                    menuSection {
                         SettingsRow(systemImage: "calendar", label: "Custody schedule", destination: ComingSoonView(
                             systemImage: "calendar",
                             title: "Custody schedule",
                             message: "Set your parenting-time schedule and Coparo will color-code your calendar automatically — your days and your co-parent's days. Coming soon."
                         ))
-                        rowDivider
-                        SettingsRow(systemImage: "shield.lefthalf.filled", label: "Mode", trailing: .badge(mode.badge), destination: ModeView())
-                        rowDivider
+                        SettingsRow(systemImage: "shield", label: "Mode", trailing: .badge(mode.badge), destination: ModeView())
                         SettingsRow(systemImage: "bell", label: "Notifications", destination: ComingSoonView(
                             systemImage: "bell",
                             title: "Notifications",
                             message: "Gentle reminders to finish a thin entry or log an exchange, on your schedule. Coming soon."
                         ))
-                        rowDivider
                         SettingsRow(systemImage: "sun.max", label: "Appearance", trailing: .value(appearance.rawValue), destination: AppearanceView())
                     }
 
-                    settingsCard {
-                        SettingsRow(systemImage: "lock.shield", label: "Privacy & data", destination: PrivacyDataView(onRestore: onRestore, onReset: onReset))
-                        rowDivider
+                    fullDivider
+
+                    menuSection {
+                        SettingsRow(systemImage: "mic", label: "Privacy & data", destination: PrivacyDataView(onRestore: onRestore, onReset: onReset))
                         Button {
                             onExport()
                         } label: {
-                            SettingsRowLabel(systemImage: "square.and.arrow.up", label: "Export all data", trailing: .chevron)
+                            SettingsRowLabel(systemImage: "tray.and.arrow.down", label: "Export all data", trailing: .chevron)
                         }
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(20)
+                .padding(.bottom, 12)
             }
-            .background(FactTrailTheme.background(for: colorScheme).ignoresSafeArea())
+            .background(FactTrailTheme.surface(for: colorScheme).ignoresSafeArea())
             .navigationTitle("Menu")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -168,11 +172,11 @@ struct SettingsView: View {
     }
 
     private var profileRow: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             Text(initial)
-                .font(.system(size: 20, weight: .bold))
+                .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(.white)
-                .frame(width: 52, height: 52)
+                .frame(width: 46, height: 46)
                 .background(
                     Circle().fill(
                         LinearGradient(
@@ -183,40 +187,32 @@ struct SettingsView: View {
                     )
                 )
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(displayName)
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                 Text("Stored on this device")
-                    .font(.system(size: 13, weight: .regular))
+                    .font(.system(size: 12, weight: .regular))
                     .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
             }
 
             Spacer()
         }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 2)
     }
 
-    private func settingsCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    /// A group of full-width rows. Matches the reference's flush list (no card outline);
+    /// groups are separated by full-width dividers rather than boxed in.
+    private func menuSection<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         VStack(spacing: 0) {
             content()
         }
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(FactTrailTheme.surface(for: colorScheme))
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1)
-        }
+        .padding(.vertical, 6)
     }
 
-    private var rowDivider: some View {
+    private var fullDivider: some View {
         Rectangle()
             .fill(FactTrailTheme.border(for: colorScheme))
             .frame(height: 1)
-            .padding(.leading, 54)
     }
 }
 
@@ -252,11 +248,15 @@ private struct SettingsRowLabel: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: systemImage)
-                .font(.system(size: 16, weight: .regular))
-                .foregroundStyle(FactTrailTheme.primaryAction(for: colorScheme))
-                .frame(width: 26)
+        HStack(spacing: 13) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(FactTrailTheme.aiAccent(for: colorScheme).opacity(0.10))
+                Image(systemName: systemImage)
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+            }
+            .frame(width: 32, height: 32)
 
             Text(label)
                 .font(.system(size: 15, weight: .medium))
@@ -269,12 +269,11 @@ private struct SettingsRowLabel: View {
                 chevron
             case .badge(let text):
                 Text(text)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
-                    .padding(.vertical, 3)
-                    .padding(.horizontal, 9)
-                    .background(Capsule().fill(FactTrailTheme.aiSoftBackground(for: colorScheme)))
-                chevron
+                    .padding(.vertical, 2)
+                    .padding(.horizontal, 8)
+                    .background(Capsule().fill(FactTrailTheme.aiAccent(for: colorScheme).opacity(0.12)))
             case .value(let text):
                 Text(text)
                     .font(.system(size: 14, weight: .regular))
@@ -282,8 +281,8 @@ private struct SettingsRowLabel: View {
                 chevron
             }
         }
-        .padding(.vertical, 13)
-        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .padding(.horizontal, 20)
         .contentShape(Rectangle())
     }
 
