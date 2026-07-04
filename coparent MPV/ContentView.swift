@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import UIKit
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     @AppStorage("hasAcceptedFactTrailDisclaimer") private var hasAcceptedDisclaimer = false
@@ -1881,7 +1882,8 @@ private struct IncidentEntryView: View {
     @State private var isGeneratingFinalDocumentation = false
     @State private var finalDocumentationErrorMessage: String?
     @State private var isShowingOptionalDetails: Bool
-    @State private var isShowingEvidenceOptions: Bool
+    @State private var isShowingFileImporter = false
+    @State private var pendingUpload: PendingUpload?
     @State private var incidentLocationManager = ExchangeLocationManager()
     @State private var speechTranscriber = SpeechTranscriber()
     @State private var voiceBaseNotes = ""
@@ -1907,7 +1909,6 @@ private struct IncidentEntryView: View {
         _draft = State(initialValue: initialDraft)
         _aiSuggestion = State(initialValue: initialDraft.aiAnalysis)
         _isShowingOptionalDetails = State(initialValue: mode == .edit)
-        _isShowingEvidenceOptions = State(initialValue: mode == .edit)
         _userProvidedIncidentDate = State(initialValue: mode == .edit)
         self.mode = mode
         self.aiService = aiService
@@ -1951,6 +1952,29 @@ private struct IncidentEntryView: View {
         }
         .onChange(of: speechTranscriber.transcript) { _, newTranscript in
             draft.originalNotes = mergedNotes(base: voiceBaseNotes, transcript: newTranscript)
+        }
+        .fileImporter(
+            isPresented: $isShowingFileImporter,
+            allowedContentTypes: [.pdf, .image, .plainText, .text, .rtf, .data],
+            allowsMultipleSelection: false
+        ) { result in
+            handleFileImport(result)
+        }
+        .sheet(item: $pendingUpload) { upload in
+            AttachmentUploadSheet(
+                upload: upload,
+                onAttached: { attachment in
+                    draft.evidenceAttachments.append(attachment)
+                },
+                onRemove: { attachment in
+                    draft.evidenceAttachments.removeAll { $0.id == attachment.id }
+                },
+                onDone: {
+                    pendingUpload = nil
+                }
+            )
+            .presentationDetents([.height(290)])
+            .presentationDragIndicator(.hidden)
         }
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
@@ -2096,7 +2120,7 @@ private struct IncidentEntryView: View {
             }
 
             Button {
-                isShowingEvidenceOptions = true
+                isShowingFileImporter = true
             } label: {
                 AttachmentPill(iconAssetName: "codoc-file", title: "File")
             }
@@ -2313,6 +2337,35 @@ private struct IncidentEntryView: View {
 
     private func removeAttachment(_ attachment: EvidenceAttachment) {
         draft.evidenceAttachments.removeAll { $0.id == attachment.id }
+    }
+
+    /// Reads the picked document up front (while its security scope is valid) and hands the
+    /// bytes to the upload sheet, which shows the reference-style confirmation.
+    private func handleFileImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer {
+                if scoped { url.stopAccessingSecurityScopedResource() }
+            }
+            do {
+                let data = try Data(contentsOf: url)
+                let fileName = url.lastPathComponent
+                attachmentErrorMessage = nil
+                // Present the confirmation sheet on the next runloop tick: presenting it
+                // synchronously here collides with the file importer's own dismissal and
+                // SwiftUI silently drops the sheet.
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(0.35))
+                    pendingUpload = PendingUpload(kind: .file, fileName: fileName, data: data)
+                }
+            } catch {
+                attachmentErrorMessage = "That file could not be read on this device."
+            }
+        case .failure(let error):
+            attachmentErrorMessage = "Could not import file: \(error.localizedDescription)"
+        }
     }
 
     private func refreshGuidedQuestions() {
@@ -3286,6 +3339,189 @@ private struct ReviewChipSection: View {
     }
 }
 
+// MARK: - Attachment upload sheet (reference "Add file / photo / screenshot")
+
+/// The three attachment kinds the entry screen can add, each with the reference's tint and icon.
+enum AttachmentKind {
+    case photo, screenshot, file
+
+    var sheetTitle: String {
+        switch self {
+        case .photo: return "Add photo"
+        case .screenshot: return "Add screenshot"
+        case .file: return "Add file"
+        }
+    }
+
+    var noun: String {
+        switch self {
+        case .photo: return "photo"
+        case .screenshot: return "screenshot"
+        case .file: return "file"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .photo: return Color(red: 0x2F / 255, green: 0x5D / 255, blue: 0x8C / 255)
+        case .screenshot: return Color(red: 0x4F / 255, green: 0x8F / 255, blue: 0x8B / 255)
+        case .file: return Color(red: 0x05 / 255, green: 0x96 / 255, blue: 0x69 / 255)
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .photo: return "photo"
+        case .screenshot: return "text.bubble"
+        case .file: return "doc"
+        }
+    }
+}
+
+/// A document the user just picked, awaiting confirmation in the upload sheet.
+struct PendingUpload: Identifiable {
+    let id = UUID()
+    let kind: AttachmentKind
+    let fileName: String
+    let data: Data
+}
+
+/// Reference-style upload sheet: a brief "Adding…" spinner, then a confirmed card
+/// (tinted thumb + filename + "Added to this entry" + remove) and a Done button.
+private struct AttachmentUploadSheet: View {
+    let upload: PendingUpload
+    let onAttached: (EvidenceAttachment) -> Void
+    let onRemove: (EvidenceAttachment) -> Void
+    let onDone: () -> Void
+
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var attachment: EvidenceAttachment?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Capsule()
+                .fill(FactTrailTheme.border(for: colorScheme))
+                .frame(width: 36, height: 4)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 8)
+                .padding(.bottom, 18)
+
+            Text(upload.kind.sheetTitle)
+                .font(.system(size: 17, weight: .bold, design: .default))
+                .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                .padding(.bottom, 16)
+
+            if let attachment {
+                confirmedRow(attachment)
+                    .padding(.bottom, 12)
+            } else {
+                progressView
+            }
+
+            Button(action: onDone) {
+                Text("Done")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(FactTrailPrimaryButtonStyle())
+            .padding(.top, 6)
+        }
+        .padding(.horizontal, 22)
+        .padding(.bottom, 20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .presentationBackground(FactTrailTheme.surface(for: colorScheme))
+        .task { await confirm() }
+    }
+
+    private var progressView: some View {
+        VStack(spacing: 14) {
+            UploadSpinner(color: FactTrailTheme.aiAccent(for: colorScheme))
+            Text("Adding \(upload.kind.noun)…")
+                .font(.system(size: 13, weight: .medium, design: .default))
+                .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 20)
+        .padding(.bottom, 8)
+    }
+
+    private func confirmedRow(_ attachment: EvidenceAttachment) -> some View {
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(upload.kind.color.opacity(0.14))
+                Image(systemName: upload.kind.systemImage)
+                    .font(.system(size: 22, weight: .regular))
+                    .foregroundStyle(upload.kind.color)
+            }
+            .frame(width: 52, height: 52)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(attachment.fileName)
+                    .font(.system(size: 13.5, weight: .semibold, design: .default))
+                    .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .bold))
+                    Text("Added to this entry")
+                        .font(.system(size: 11.5, weight: .medium, design: .default))
+                }
+                .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+            }
+
+            Spacer(minLength: 0)
+
+            Button {
+                onRemove(attachment)
+                onDone()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                    .frame(width: 26, height: 26)
+                    .background(Circle().fill(FactTrailTheme.border(for: colorScheme).opacity(0.6)))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Remove attachment")
+        }
+        .padding(.vertical, 6)
+    }
+
+    /// Shows the "Adding…" beat briefly (matching the reference), then reveals the confirmed
+    /// attachment and hands it back to the entry so it's saved with the record.
+    private func confirm() async {
+        guard attachment == nil else { return }
+        try? await Task.sleep(for: .seconds(0.75))
+        let created = EvidenceAttachment(id: UUID(), fileName: upload.fileName, data: upload.data)
+        onAttached(created)
+        withAnimation(.easeInOut(duration: 0.2)) {
+            attachment = created
+        }
+    }
+}
+
+private struct UploadSpinner: View {
+    let color: Color
+    @State private var spinning = false
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(color.opacity(0.18), lineWidth: 3)
+            Circle()
+                .trim(from: 0, to: 0.25)
+                .stroke(color, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                .rotationEffect(.degrees(spinning ? 360 : 0))
+        }
+        .frame(width: 44, height: 44)
+        .onAppear {
+            withAnimation(.linear(duration: 0.8).repeatForever(autoreverses: false)) {
+                spinning = true
+            }
+        }
+    }
+}
+
 private struct EvidenceAttachmentGrid: View {
     let attachments: [EvidenceAttachment]
     let onRemove: ((EvidenceAttachment) -> Void)?
@@ -3315,9 +3551,19 @@ private struct EvidenceAttachmentThumbnail: View {
                         .resizable()
                         .scaledToFill()
                 } else {
-                    Image(systemName: "photo")
-                        .font(.title)
-                        .foregroundStyle(.secondary)
+                    VStack(spacing: 6) {
+                        Image(systemName: "doc.fill")
+                            .font(.system(size: 26, weight: .regular))
+                            .foregroundStyle(Color(red: 0x05 / 255, green: 0x96 / 255, blue: 0x69 / 255))
+                        Text(attachment.fileName)
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 6)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color(red: 0x05 / 255, green: 0x96 / 255, blue: 0x69 / 255).opacity(0.08))
                 }
             }
             .frame(width: 92, height: 92)
