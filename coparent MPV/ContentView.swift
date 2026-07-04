@@ -1107,7 +1107,7 @@ private struct HomeView: View {
                     VStack(spacing: 0) {
                         HomeActionCard(
                             iconAssetName: "codoc-document-incident",
-                            title: "Log an incident",
+                            title: "Record an event",
                             subtitle: "Describe what happened or just talk it out.",
                             style: .primary,
                             action: onDocumentSomething

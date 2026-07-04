@@ -117,7 +117,7 @@ struct CheckInFollowUpSheetView: View {
                 onLogIncident()
                 dismiss()
             } label: {
-                Text("Log an incident")
+                Text("Record an event")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(FactTrailGlassButtonStyle())
