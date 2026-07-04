@@ -5233,6 +5233,13 @@ private struct TimelineAddNoteSheet: View {
                 .padding(.bottom, 8)
             }
 
+            if let dictationError = speechTranscriber.errorMessage {
+                Text(dictationError)
+                    .font(.system(size: 12, weight: .medium, design: .default))
+                    .foregroundStyle(.red)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
             Button {
                 onSave()
             } label: {
