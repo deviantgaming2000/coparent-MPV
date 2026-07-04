@@ -6,6 +6,65 @@ export class AIProvider {
   async generateFinalDocumentationSummary(_request) {
     throw new Error("AIProvider.generateFinalDocumentationSummary must be implemented");
   }
+
+  async analyzeTimeline(_request) {
+    throw new Error("AIProvider.analyzeTimeline must be implemented");
+  }
+}
+
+const allowedInsightTypes = ["concern", "affirm"];
+const allowedEntryKinds = ["entry", "checkin", "exchange", "document", "flag"];
+const allowedVisualTypes = ["strip", "tally", "none"];
+
+export function normalizeTimelineAnalysis(value) {
+  const insights = Array.isArray(value?.insights) ? value.insights : [];
+  const annotations = Array.isArray(value?.annotations) ? value.annotations : [];
+
+  return {
+    insights: insights.map(normalizeInsight).filter(Boolean),
+    annotations: annotations
+      .map((a) => ({ text: stringValue(a?.text), anchorDate: stringValue(a?.anchorDate) }))
+      .filter((a) => a.text && a.anchorDate)
+  };
+}
+
+function normalizeInsight(value) {
+  const headline = stringValue(value?.headline);
+  if (!headline) {
+    return null;
+  }
+
+  return {
+    type: allowedInsightTypes.includes(value?.type) ? value.type : "concern",
+    iconSystemName: stringValue(value?.iconSystemName) || "chart.bar",
+    eyebrow: stringValue(value?.eyebrow) || "Pattern",
+    headline,
+    body: stringValue(value?.body),
+    tag: stringValue(value?.tag),
+    firstSeen: stringValue(value?.firstSeen),
+    lastSeen: stringValue(value?.lastSeen),
+    occurrences: Number.isFinite(value?.occurrences) ? Math.trunc(value.occurrences) : 0,
+    visual: normalizeVisual(value?.visual),
+    supporting: (Array.isArray(value?.supporting) ? value.supporting : [])
+      .map((s) => ({
+        text: stringValue(s?.text),
+        date: stringValue(s?.date),
+        kind: allowedEntryKinds.includes(s?.kind) ? s.kind : "entry"
+      }))
+      .filter((s) => s.text)
+  };
+}
+
+function normalizeVisual(value) {
+  const type = allowedVisualTypes.includes(value?.type) ? value.type : "none";
+  if (type === "strip") {
+    return { type, dates: stringArray(value?.dates) };
+  }
+  if (type === "tally") {
+    const values = Array.isArray(value?.values) ? value.values.map((n) => (Number.isFinite(n) ? Math.trunc(n) : 0)) : [];
+    return { type, values, labels: stringArray(value?.labels) };
+  }
+  return { type: "none" };
 }
 
 export const allowedCategories = [

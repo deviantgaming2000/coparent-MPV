@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import express from "express";
+import { ClaudeProvider } from "./ai/ClaudeProvider.js";
 import { MockAIProvider } from "./ai/MockAIProvider.js";
 import { OpenAIProvider } from "./ai/OpenAIProvider.js";
 import { ZAIProvider } from "./ai/ZAIProvider.js";
@@ -63,11 +64,38 @@ app.post("/generate-final-documentation-summary", requireAuth, async (req, res) 
   }
 });
 
+app.post("/analyze-timeline", requireAuth, async (req, res) => {
+  try {
+    const request = sanitizeTimelineRequest(req.body);
+    const usage = enforceMonthlyLimit(req.auth);
+    const result = await provider.analyzeTimeline(request);
+
+    res.json({
+      ...result,
+      cached: false,
+      usage: {
+        tier: req.auth.tier,
+        usedThisMonth: usage.used,
+        monthlyLimit: usage.limit
+      }
+    });
+  } catch (error) {
+    const status = error.statusCode ?? 500;
+    res.status(status).json({
+      error: status === 500 ? "Timeline insights could not be generated." : error.message
+    });
+  }
+});
+
 app.listen(port, () => {
-  console.log(`FactTrail backend listening on http://localhost:${port}`);
+  console.log(`Coparo backend listening on http://localhost:${port}`);
 });
 
 function makeProvider() {
+  if (process.env.AI_PROVIDER === "claude" && process.env.ANTHROPIC_API_KEY) {
+    return new ClaudeProvider();
+  }
+
   if (process.env.AI_PROVIDER === "openai" && process.env.OPENAI_API_KEY) {
     return new OpenAIProvider();
   }
@@ -172,6 +200,37 @@ function sanitizeFinalDocumentationRequest(body) {
 
   if (!request.originalNotes) {
     const error = new Error("originalNotes is required.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return request;
+}
+
+function sanitizeTimelineRequest(body) {
+  const entries = Array.isArray(body.entries)
+    ? body.entries.slice(0, 500).map((entry) => ({
+        id: stringValue(entry?.id),
+        date: stringValue(entry?.date),
+        kind: stringValue(entry?.kind),
+        title: stringValue(entry?.title),
+        text: stringValue(entry?.text),
+        tags: stringArray(entry?.tags),
+        flagged: Boolean(entry?.flagged),
+        location: stringValue(entry?.location)
+      }))
+    : [];
+
+  const request = { entries };
+
+  if (JSON.stringify(request).length > inputLimit * 8) {
+    const error = new Error("Timeline is too large to analyze in one request.");
+    error.statusCode = 413;
+    throw error;
+  }
+
+  if (entries.length === 0) {
+    const error = new Error("entries is required.");
     error.statusCode = 400;
     throw error;
   }

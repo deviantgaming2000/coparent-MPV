@@ -77,6 +77,149 @@ struct AIBackendService: AIService {
 
         return try JSONDecoder().decode(FinalDocumentationSummary.self, from: data)
     }
+
+    func analyzeTimeline(entries: [TimelineEntryInput]) async throws -> TimelineAnalysis {
+        // Try the backend; fall back to the on-device engine on any failure so the app
+        // always has insights even when the backend is unreachable or not yet configured.
+        do {
+            return try await requestTimelineAnalysis(entries: entries)
+        } catch {
+            AIDebugLogger.log("analyzeTimeline backend failed; using local engine", "\(error)")
+            return TimelineInsightEngine.analyze(entries: entries)
+        }
+    }
+
+    private func requestTimelineAnalysis(entries: [TimelineEntryInput]) async throws -> TimelineAnalysis {
+        let url = endpointURL.deletingLastPathComponent().appendingPathComponent("analyze-timeline")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 30
+        request.httpBody = try JSONEncoder().encode(TimelineAnalysisRequest(entries: entries))
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AIBackendServiceError.invalidResponse
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            let errorResponse = try? JSONDecoder().decode(AIBackendErrorResponse.self, from: data)
+            throw AIBackendServiceError.server(errorResponse?.error ?? "Timeline insights could not be generated.")
+        }
+        return try JSONDecoder().decode(TimelineAnalysisResponse.self, from: data).model
+    }
+}
+
+// MARK: - Timeline analysis DTOs (map backend JSON <-> the Color-free domain types)
+
+private struct TimelineAnalysisRequest: Encodable {
+    struct Entry: Encodable {
+        let id: String
+        let date: String
+        let kind: String
+        let title: String
+        let text: String
+        let tags: [String]
+        let flagged: Bool
+        let location: String
+    }
+    let entries: [Entry]
+
+    init(entries: [TimelineEntryInput]) {
+        let formatter = ISO8601DateFormatter()
+        self.entries = entries.map { entry in
+            Entry(
+                id: entry.id,
+                date: formatter.string(from: entry.date),
+                kind: entry.kind.rawValue,
+                title: entry.title,
+                text: entry.text,
+                tags: entry.tags,
+                flagged: entry.flagged,
+                location: entry.location
+            )
+        }
+    }
+}
+
+private struct TimelineAnalysisResponse: Decodable {
+    let insights: [InsightDTO]
+    let annotations: [AnnotationDTO]
+
+    var model: TimelineAnalysis {
+        TimelineAnalysis(
+            insights: insights.map { $0.model },
+            annotations: annotations.compactMap { $0.model }
+        )
+    }
+}
+
+private struct InsightDTO: Decodable {
+    let type: String
+    let iconSystemName: String?
+    let eyebrow: String?
+    let headline: String
+    let body: String?
+    let tag: String?
+    let firstSeen: String?
+    let lastSeen: String?
+    let occurrences: Int?
+    let visual: VisualDTO?
+    let supporting: [SupportDTO]?
+
+    var model: Insight {
+        Insight(
+            type: type == "affirm" ? .affirm : .concern,
+            visual: visual?.model ?? .none,
+            iconSystemName: iconSystemName ?? "chart.bar",
+            eyebrow: eyebrow ?? "Pattern",
+            headline: headline,
+            body: body ?? "",
+            tag: tag ?? "",
+            firstSeen: firstSeen ?? "",
+            lastSeen: lastSeen ?? "",
+            occurrences: occurrences ?? 0,
+            supporting: (supporting ?? []).map { $0.model }
+        )
+    }
+}
+
+private struct VisualDTO: Decodable {
+    let type: String
+    let dates: [String]?
+    let values: [Int]?
+    let labels: [String]?
+
+    var model: InsightVisual {
+        switch type {
+        case "strip": return .strip(dates: dates ?? [])
+        case "tally": return .tally(values: values ?? [], labels: labels ?? [])
+        default: return .none
+        }
+    }
+}
+
+private struct SupportDTO: Decodable {
+    let text: String
+    let date: String?
+    let kind: String?
+
+    var model: InsightSupport {
+        InsightSupport(text: text, date: date ?? "", kind: EntryKind(rawValue: kind ?? "entry") ?? .entry)
+    }
+}
+
+private struct AnnotationDTO: Decodable {
+    let text: String
+    let anchorDate: String
+
+    var model: TimelineAnnotation? {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        guard let date = formatter.date(from: anchorDate) else { return nil }
+        return TimelineAnnotation(text: text, anchorDate: date)
+    }
 }
 
 extension AIBackendService: AIServiceStatusProviding {
