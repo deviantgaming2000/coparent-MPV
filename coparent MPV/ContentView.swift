@@ -4600,8 +4600,8 @@ private struct CalendarTimelineView: View {
             monthHeader
 
             HStack(spacing: 14) {
-                calendarLegend("Carrie's days", color: FactTrailTheme.primaryAction(for: colorScheme).opacity(0.20))
-                calendarLegend("Nathan's days", color: FactTrailTheme.primaryAction(for: colorScheme).opacity(0.12))
+                calendarLegend("Your days", color: FactTrailTheme.primaryAction(for: colorScheme).opacity(0.20))
+                calendarLegend("Co-parent's days", color: FactTrailTheme.primaryAction(for: colorScheme).opacity(0.12))
                 calendarLegend("Exchange", color: FactTrailTheme.aiAccent(for: colorScheme).opacity(0.24), stroked: true)
             }
             .font(.system(size: 12, weight: .medium, design: .default))
