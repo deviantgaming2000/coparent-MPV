@@ -588,6 +588,17 @@ struct ContentView: View {
         storedDocuments = []
         saveErrorMessage = nil
 
+        // Clear any in-flight flow state that referenced the records we just deleted,
+        // so nothing (e.g. a pending check-in follow-up) can re-present stale data.
+        pendingCheckInFollowUp = nil
+        pendingCheckInIncidentDraft = nil
+        pendingCheckInIncidentID = nil
+        pendingExchangeDraft = nil
+        pendingExchangeRecordID = nil
+        activeReviewSummary = nil
+        isShowingReview = false
+        shouldShowCheckInSheet = false
+
         path = []
         userName = ""
         hasAcceptedDisclaimer = false
