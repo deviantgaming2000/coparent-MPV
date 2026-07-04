@@ -21,6 +21,11 @@ struct ContentView: View {
     @State private var saveErrorMessage: String?
     @State private var shouldShowNamePrompt = false
     @State private var shouldShowResetConfirmation = false
+    @State private var backupExportFile: BackupExportFile?
+    @State private var isShowingRestorePicker = false
+    @State private var pendingRestoreBundle: BackupBundle?
+    @State private var shouldShowRestoreConfirmation = false
+    @State private var dataTransferMessage: DataTransferMessage?
     @State private var shouldShowCheckInSheet = false
     @State private var pendingCheckInFollowUp: CheckIn?
     @State private var pendingCheckInIncidentDraft: IncidentDraft?
@@ -53,6 +58,8 @@ struct ContentView: View {
                         onViewInsights: { path.append(.insights) },
                         onEditName: { shouldShowNamePrompt = true },
                         onResetData: { shouldShowResetConfirmation = true },
+                        onBackup: exportBackup,
+                        onRestore: { isShowingRestorePicker = true },
                         onOpenIncident: { incident in
                             path.append(.edit(incident.id))
                         },
@@ -298,6 +305,30 @@ struct ContentView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This permanently deletes every logged record, exchange, check-in, note, and document on this device, and returns the app to its first-launch state. This cannot be undone.")
+        }
+        .sheet(item: $backupExportFile) { file in
+            ShareSheet(items: [file.url])
+        }
+        .fileImporter(
+            isPresented: $isShowingRestorePicker,
+            allowedContentTypes: [.json, .data],
+            allowsMultipleSelection: false
+        ) { result in
+            handleRestorePick(result)
+        }
+        .alert("Restore this backup?", isPresented: $shouldShowRestoreConfirmation, presenting: pendingRestoreBundle) { bundle in
+            Button("Replace All Data", role: .destructive) {
+                applyRestore(bundle)
+                pendingRestoreBundle = nil
+            }
+            Button("Cancel", role: .cancel) {
+                pendingRestoreBundle = nil
+            }
+        } message: { bundle in
+            Text("This replaces everything currently in Coparo with the \(bundle.recordCount) record\(bundle.recordCount == 1 ? "" : "s") in this backup (from \(bundle.exportedAt.formatted(date: .abbreviated, time: .shortened))). This cannot be undone.")
+        }
+        .alert(item: $dataTransferMessage) { message in
+            Alert(title: Text(message.title), message: Text(message.body), dismissButton: .default(Text("OK")))
         }
     }
 
@@ -640,6 +671,108 @@ struct ContentView: View {
         userName = ""
         hasAcceptedDisclaimer = false
     }
+
+    // MARK: - Backup & restore
+
+    /// Builds a single portable backup file and hands it to the share sheet.
+    private func exportBackup() {
+        do {
+            let url = try BackupService.writeBackup(
+                incidents: incidents,
+                exchangeRecords: exchangeRecords,
+                entries: entries,
+                checkIns: checkIns,
+                documents: storedDocuments,
+                linkedNotes: linkedNotes,
+                now: Date()
+            )
+            backupExportFile = BackupExportFile(url: url)
+        } catch {
+            dataTransferMessage = DataTransferMessage(
+                title: "Backup failed",
+                body: "Your records could not be exported on this device. \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private func handleRestorePick(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            do {
+                pendingRestoreBundle = try BackupService.readBackup(from: url)
+                shouldShowRestoreConfirmation = true
+            } catch {
+                dataTransferMessage = DataTransferMessage(
+                    title: "Couldn't open backup",
+                    body: error.localizedDescription
+                )
+            }
+        case .failure(let error):
+            dataTransferMessage = DataTransferMessage(
+                title: "Couldn't open backup",
+                body: error.localizedDescription
+            )
+        }
+    }
+
+    /// Replaces all current data with a backup's contents, then reloads in-memory state.
+    private func applyRestore(_ bundle: BackupBundle) {
+        do {
+            try incidentStore.saveIncidents(bundle.incidents)
+            try exchangeRecordStore.saveExchangeRecords(bundle.exchangeRecords)
+            try entryStore.saveEntries(bundle.entries)
+            try checkInStore.saveCheckIns(bundle.checkIns)
+            try documentStore.saveDocuments(bundle.documents)
+            try BackupService.restoreDocumentFiles(bundle.files)
+
+            let notesData = try JSONEncoder().encode(bundle.linkedNotes)
+            UserDefaults.standard.set(notesData, forKey: linkedNotesStorageKey)
+
+            incidents = incidentStore.loadIncidents()
+            exchangeRecords = exchangeRecordStore.loadExchangeRecords()
+            entries = entryStore.loadEntries()
+            checkIns = checkInStore.loadCheckIns()
+            linkedNotes = loadLinkedNotes()
+            storedDocuments = documentStore.loadDocuments()
+            saveErrorMessage = nil
+
+            path = []
+            dataTransferMessage = DataTransferMessage(
+                title: "Backup restored",
+                body: "Your records were restored from the backup."
+            )
+        } catch {
+            dataTransferMessage = DataTransferMessage(
+                title: "Restore failed",
+                body: "The backup could not be fully restored. \(error.localizedDescription)"
+            )
+        }
+    }
+}
+
+/// Wraps a generated backup file so `.sheet(item:)` can present the share sheet for it.
+private struct BackupExportFile: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+/// A one-off success/error notice shown after a backup or restore.
+private struct DataTransferMessage: Identifiable {
+    let id = UUID()
+    let title: String
+    let body: String
+}
+
+/// Bridges UIActivityViewController (the system share sheet) into SwiftUI.
+private struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
 
 private struct FactTrailSplashView: View {
@@ -1093,6 +1226,8 @@ private struct HomeView: View {
     var onViewInsights: () -> Void = {}
     let onEditName: () -> Void
     var onResetData: () -> Void = {}
+    var onBackup: () -> Void = {}
+    var onRestore: () -> Void = {}
     let onOpenIncident: (Incident) -> Void
     let onOpenExchangeRecord: (ExchangeRecord) -> Void
     var onPickUp: () -> Void = {}
@@ -1196,6 +1331,11 @@ private struct HomeView: View {
                         Text(appearance.rawValue).tag(appearance)
                     }
                 }
+
+                Divider()
+
+                Button("Back up your records", systemImage: "square.and.arrow.up", action: onBackup)
+                Button("Restore from backup", systemImage: "square.and.arrow.down", action: onRestore)
 
                 Divider()
 
