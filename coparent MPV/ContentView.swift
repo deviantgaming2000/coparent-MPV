@@ -616,19 +616,19 @@ private struct FactTrailSplashView: View {
                         )
                         .frame(width: 76, height: 76)
                         .overlay {
-                            Text("F")
-                                .font(.system(size: 38, weight: .black, design: .rounded))
+                            Text("C")
+                                .font(.system(size: 38, weight: .black, design: .default))
                                 .foregroundStyle(.white)
                         }
                         .scaleEffect(isAnimating ? 1.05 : 0.96)
                 }
 
                 VStack(spacing: 6) {
-                    Text("FactTrail")
-                        .font(.system(size: 38, weight: .bold, design: .rounded))
+                    Text("Coparo")
+                        .font(.system(size: 38, weight: .bold, design: .default))
                         .foregroundStyle(.white)
 
-                    Text("Organize the facts.")
+                    Text("A clear record, quietly kept.")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.white.opacity(0.62))
                 }
@@ -685,14 +685,6 @@ private enum AppRoute: Hashable {
     case exchangeRecord
     case edit(UUID)
     case documents
-}
-
-private enum ChildFilter: String, CaseIterable, Identifiable {
-    case all = "All"
-    case childInvolved = "Child involved"
-    case notChildInvolved = "No child involved"
-
-    var id: String { rawValue }
 }
 
 private enum EntryMode {
@@ -890,7 +882,7 @@ private struct OnboardingView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("FactTrail")
+                    Text("Coparo")
                         .font(.largeTitle.bold())
                     Text("A calm place to organize parenting documentation and preserve important records.")
                         .font(.headline)
@@ -950,7 +942,7 @@ private struct UserNameSetupView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Welcome to FactTrail")
+                Text("Welcome to Coparo")
                     .font(.title.bold())
 
                 Text("What should the app call you?")
@@ -1056,14 +1048,6 @@ private struct HomeView: View {
                         )
 
                         HomeActionCard(
-                            iconAssetName: "codoc-handoff",
-                            title: "Child exchange",
-                            subtitle: "Timestamp a pickup, drop-off, or handoff.",
-                            style: .standard,
-                            action: onExchangeRecord
-                        )
-
-                        HomeActionCard(
                             iconAssetName: "codoc-folder",
                             title: "My documents",
                             subtitle: "Store screenshots, files, and supporting records.",
@@ -1118,7 +1102,7 @@ private struct HomeView: View {
 
             Button(action: onEditName) {
                 Text(userInitial)
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .font(.system(size: 15, weight: .bold, design: .default))
                     .foregroundStyle(.white)
                     .frame(width: 44, height: 44)
                     .background {
@@ -1151,7 +1135,7 @@ private struct HomeView: View {
     private var greetingBlock: some View {
         VStack(alignment: .leading, spacing: 7) {
             Text("Hey, \(displayName).")
-                .font(.system(size: 30, weight: .bold, design: .rounded))
+                .font(.system(size: 30, weight: .bold, design: .default))
                 .foregroundStyle(HomePalette.primaryText(for: colorScheme))
                 .lineLimit(1)
                 .minimumScaleFactor(0.82)
@@ -1305,7 +1289,7 @@ private struct HomeStatusLine: View {
                 .animation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true), value: isPulsing)
 
             Text(text)
-                .font(.system(size: 16, weight: .medium, design: .rounded))
+                .font(.system(size: 16, weight: .medium, design: .default))
                 .foregroundStyle(HomePalette.mutedText(for: colorScheme))
         }
         .onAppear {
@@ -1335,17 +1319,17 @@ private struct HomeLastLoggedCard: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("LAST LOGGED")
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .font(.system(size: 11, weight: .bold, design: .default))
                         .tracking(2)
                         .foregroundStyle(HomePalette.mutedText(for: colorScheme))
 
                     Text(compactTitle)
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .font(.system(size: 16, weight: .semibold, design: .default))
                         .foregroundStyle(HomePalette.primaryText(for: colorScheme))
                         .lineLimit(1)
 
                     Text(preview)
-                        .font(.system(size: 14, weight: .regular, design: .rounded))
+                        .font(.system(size: 14, weight: .regular, design: .default))
                         .foregroundStyle(HomePalette.secondaryText(for: colorScheme))
                         .lineLimit(2)
                 }
@@ -1354,7 +1338,7 @@ private struct HomeLastLoggedCard: View {
 
                 if isFlagged {
                     Text("Flagged")
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .font(.system(size: 12, weight: .semibold, design: .default))
                         .foregroundStyle(HomePalette.primaryAction(for: colorScheme))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
@@ -1492,12 +1476,12 @@ private struct HomeActionCard: View {
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(title)
-                            .font(.system(size: 18, weight: .semibold, design: .rounded))
+                            .font(.system(size: 18, weight: .semibold, design: .default))
                             .foregroundStyle(titleColor)
 
                         if let badgeText {
                             Text(badgeText)
-                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .font(.system(size: 12, weight: .semibold, design: .default))
                                 .foregroundStyle(.white)
                                 .frame(width: 24, height: 24)
                                 .background(HomePalette.aiAccent(for: colorScheme), in: Circle())
@@ -1505,17 +1489,15 @@ private struct HomeActionCard: View {
                     }
 
                     Text(subtitle)
-                        .font(.system(size: 15, weight: .regular, design: .rounded))
+                        .font(.system(size: 15, weight: .regular, design: .default))
                         .foregroundStyle(subtitleColor)
                         .lineLimit(2)
 
                     if let footnote {
                         HStack(spacing: 7) {
-                            Circle()
-                                .fill(HomePalette.aiAccent(for: colorScheme))
-                                .frame(width: 7, height: 7)
+                            LocationPulseDot(color: HomePalette.aiAccent(for: colorScheme))
                             Text(footnote)
-                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                                .font(.system(size: 13, weight: .medium, design: .default))
                                 .foregroundStyle(HomePalette.aiAccent(for: colorScheme))
                         }
                         .padding(.top, 5)
@@ -1539,11 +1521,10 @@ private struct HomeActionCard: View {
     private var cardBackground: some View {
         Group {
             if style == .primary {
+                // Prototype primary card: mostly-blue gradient (primary → mix(primary 72%, accent)),
+                // matching the Save button rather than a full blue→teal sweep.
                 LinearGradient(
-                    colors: [
-                        HomePalette.primaryAction(for: colorScheme),
-                        HomePalette.aiAccent(for: colorScheme)
-                    ],
+                    colors: FactTrailTheme.primaryButtonColors(for: colorScheme),
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
@@ -1582,16 +1563,19 @@ private struct HomeActionCard: View {
 }
 
 private struct HomeBottomNavigation: View {
+    var activeTab: BottomNavTab = .home
+    var onHome: () -> Void = {}
     let onTimeline: () -> Void
+    var onInsights: () -> Void = {}
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack {
-            HomeBottomNavItem(title: "Log", iconAssetName: "codoc-log-target", isActive: true, action: {})
+            HomeBottomNavItem(title: "Home", iconAssetName: "codoc-log-target", isActive: activeTab == .home, action: onHome)
 
-            HomeBottomNavItem(title: "Timeline", iconAssetName: "codoc-timeline-spine", isActive: false, action: onTimeline)
+            HomeBottomNavItem(title: "Timeline", iconAssetName: "codoc-timeline-spine", isActive: activeTab == .timeline, action: onTimeline)
 
-            HomeBottomNavItem(title: "Insights", iconAssetName: "codoc-insights-chart", isActive: false, action: {})
+            HomeBottomNavItem(title: "Insights", iconAssetName: "codoc-insights-chart", isActive: activeTab == .insights, action: onInsights)
         }
         .padding(.horizontal, 24)
         .padding(.top, 10)
@@ -1603,6 +1587,10 @@ private struct HomeBottomNavigation: View {
                 .frame(height: 1)
         }
     }
+}
+
+private enum BottomNavTab {
+    case home, timeline, insights
 }
 
 private struct HomeBottomNavItem: View {
@@ -1621,7 +1609,7 @@ private struct HomeBottomNavItem: View {
                     .scaledToFit()
                     .frame(width: 22, height: 22)
                 Text(title)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(.system(size: 12, weight: .semibold, design: .default))
             }
             .foregroundStyle(isActive ? HomePalette.primaryAction(for: colorScheme) : HomePalette.mutedText(for: colorScheme))
             .frame(maxWidth: .infinity)
@@ -1638,6 +1626,31 @@ private struct HomePressButtonStyle: ButtonStyle {
     }
 }
 
+/// Solid dot with an expanding "radar ping" ring behind it — mirrors the prototype's
+/// `.location-pulse` (loc-ring keyframes: scale 0.8→2, opacity 0.6→0, 2s ease-out, looping).
+private struct LocationPulseDot: View {
+    let color: Color
+    @State private var animating = false
+
+    var body: some View {
+        Circle()
+            .fill(color)
+            .frame(width: 7, height: 7)
+            .overlay {
+                // Ring drawn in an overlay so its growth never affects layout.
+                Circle()
+                    .strokeBorder(color, lineWidth: 1.5)
+                    .scaleEffect(animating ? 2.6 : 1.0)
+                    .opacity(animating ? 0 : 0.6)
+            }
+            .onAppear {
+                withAnimation(.easeOut(duration: 2).repeatForever(autoreverses: false)) {
+                    animating = true
+                }
+            }
+    }
+}
+
 private struct HomeRecentActivityCard: View {
     let item: TimelineItem
     let onOpenIncident: (Incident) -> Void
@@ -1649,23 +1662,23 @@ private struct HomeRecentActivityCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline) {
                     Label(title, systemImage: iconName)
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .font(.system(size: 17, weight: .semibold, design: .default))
                         .foregroundStyle(.primary)
                     Spacer()
                     Text(DateFormatter.factTrailDateTime.string(from: item.date))
-                        .font(.system(size: 14, weight: .regular, design: .rounded))
+                        .font(.system(size: 14, weight: .regular, design: .default))
                         .foregroundStyle(.secondary)
                 }
 
                 Text(preview)
-                    .font(.system(size: 15, weight: .regular, design: .rounded))
+                    .font(.system(size: 15, weight: .regular, design: .default))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 if let statusText {
                     Text(statusText)
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .font(.system(size: 14, weight: .semibold, design: .default))
                         .foregroundStyle(statusColor)
                 }
             }
@@ -1912,7 +1925,7 @@ private struct IncidentEntryView: View {
     private var incidentTextCard: some View {
         ZStack(alignment: .bottomTrailing) {
             TextEditor(text: $draft.originalNotes)
-                .font(.system(size: 15, weight: .regular, design: .rounded))
+                .font(.system(size: 15, weight: .regular, design: .default))
                 .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                 .lineSpacing(6)
                 .padding(.horizontal, 16)
@@ -1924,7 +1937,7 @@ private struct IncidentEntryView: View {
                 .overlay(alignment: .topLeading) {
                     if draft.originalNotes.isEmpty {
                         Text("Describe what happened. Include specifics if you can, or just talk and we'll follow up.")
-                            .font(.system(size: 15, weight: .regular, design: .rounded))
+                            .font(.system(size: 15, weight: .regular, design: .default))
                             .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme).opacity(0.82))
                             .lineSpacing(8)
                             .padding(.horizontal, 21)
@@ -2009,7 +2022,7 @@ private struct IncidentEntryView: View {
                         .frame(width: 14, height: 14)
                     Text(isShowingOptionalDetails ? "Hide specifics" : "Add specifics (date, time, location, etc.)")
                 }
-                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .font(.system(size: 13, weight: .medium, design: .default))
                 .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
             }
             .buttonStyle(.plain)
@@ -2044,7 +2057,7 @@ private struct IncidentEntryView: View {
     private var editSummarySection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Final documentation summary")
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .font(.system(size: 14, weight: .semibold, design: .default))
                 .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
 
             TextEditor(text: $draft.neutralSummaryOverride)
@@ -2098,7 +2111,7 @@ private struct IncidentEntryView: View {
                     saveEntry()
                 } label: {
                     Text("Save and finish this later")
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .font(.system(size: 13, weight: .medium, design: .default))
                         .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
@@ -2436,7 +2449,7 @@ private struct AttachmentPill: View {
                 .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
 
             Text(title)
-                .font(.system(size: 12.5, weight: .medium, design: .rounded))
+                .font(.system(size: 12.5, weight: .medium, design: .default))
                 .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
         }
         .padding(.horizontal, 13)
@@ -2479,7 +2492,7 @@ private struct SpecificsTextRow: View {
             SpecificsIcon(assetName: iconAssetName)
 
             TextField(placeholder, text: $text, axis: .vertical)
-                .font(.system(size: 13.5, weight: .regular, design: .rounded))
+                .font(.system(size: 13.5, weight: .regular, design: .default))
                 .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                 .lineLimit(1...3)
                 .padding(.bottom, 5)
@@ -2524,17 +2537,17 @@ private struct IncidentDateClarificationSheet: View {
                         .fill(FactTrailTheme.aiAccent(for: colorScheme))
                         .frame(width: 6, height: 6)
                     Text("ONE QUICK THING")
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .font(.system(size: 11, weight: .bold, design: .default))
                         .tracking(2)
                         .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
                 }
 
                 Text("When did this happen?")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .font(.system(size: 28, weight: .bold, design: .default))
                     .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
 
                 Text("We'll use today's time automatically. If it happened earlier, let us know.")
-                    .font(.system(size: 16, weight: .regular, design: .rounded))
+                    .font(.system(size: 16, weight: .regular, design: .default))
                     .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
                     .lineSpacing(4)
             }
@@ -2561,7 +2574,7 @@ private struct IncidentDateClarificationSheet: View {
                     .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
 
                 TextField("Or type a date and time...", text: $customDateText)
-                    .font(.system(size: 16, weight: .regular, design: .rounded))
+                    .font(.system(size: 16, weight: .regular, design: .default))
                     .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
 
                 Button {
@@ -2600,7 +2613,7 @@ private struct IncidentDateClarificationSheet: View {
 
                 Button(action: onSkip) {
                     Text("Skip for now — we'll note when we received this")
-                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                        .font(.system(size: 14, weight: .medium, design: .default))
                         .multilineTextAlignment(.center)
                         .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
                         .frame(maxWidth: .infinity)
@@ -2668,13 +2681,13 @@ private struct DateClarificationChip: View {
         Button(action: action) {
             VStack(spacing: 5) {
                 Text(option.title)
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .font(.system(size: 16, weight: .semibold, design: .default))
                     .foregroundStyle(isSelected ? FactTrailTheme.aiAccent(for: colorScheme) : FactTrailTheme.primaryText(for: colorScheme))
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
 
                 Text(option.subtitle(from: referenceDate))
-                    .font(.system(size: 12, weight: .regular, design: .rounded))
+                    .font(.system(size: 12, weight: .regular, design: .default))
                     .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
                     .multilineTextAlignment(.center)
             }
@@ -3093,8 +3106,8 @@ private struct SummaryReviewView: View {
                     if let pdfURL {
                         ShareLink(
                             item: pdfURL,
-                            subject: Text("FactTrail Summary"),
-                            message: Text("FactTrail documentation summary")
+                            subject: Text("Coparo Summary"),
+                            message: Text("Coparo documentation summary")
                         ) {
                             Label("Export PDF", systemImage: "square.and.arrow.up")
                                 .frame(maxWidth: .infinity)
@@ -3293,10 +3306,6 @@ private struct TimelineView: View {
     @State private var calendarMode: TimelineCalendarMode = .month
     @State private var selectedDate = Date()
     @State private var expandedItemIDs: Set<String> = []
-    @State private var searchText = ""
-    @State private var selectedCategory = "All"
-    @State private var childFilter: ChildFilter = .all
-    @State private var requiresEvidence = false
     @State private var relatedFilterSource: TimelineItem?
     @State private var itemForMoreInfo: TimelineItem?
     @State private var itemForNote: TimelineItem?
@@ -3385,29 +3394,23 @@ private struct TimelineView: View {
                                 .padding(.top, 4)
                         }
 
-                        Color.clear.frame(height: 120)
+                        Color.clear.frame(height: 16)
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 4)
                 }
                 .scrollDismissesKeyboard(.immediately)
-                .mask(alignment: .top) {
-                    VStack(spacing: 0) {
-                        Rectangle().fill(Color.black)
-                        LinearGradient(
-                            colors: [Color.black, Color.black.opacity(0)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                        .frame(height: 90)
-                    }
-                }
             }
+
+            HomeBottomNavigation(
+                activeTab: .timeline,
+                onHome: { dismiss() },
+                onTimeline: {}
+            )
         }
         .factTrailScreenBackground()
         .navigationTitle(selectedStyle == .calendar ? "Calendar" : "Timeline")
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $searchText, prompt: "Search notes, summaries, people, location")
         .toolbar(.hidden, for: .navigationBar)
         .overlay(alignment: .bottom) {
             if let message = saveErrorMessage {
@@ -3571,14 +3574,14 @@ private struct TimelineView: View {
             } label: {
                 Label("Back", systemImage: "chevron.left")
                     .labelStyle(.titleAndIcon)
-                    .font(.system(size: 17, weight: .medium, design: .rounded))
+                    .font(.system(size: 17, weight: .medium, design: .default))
             }
             .foregroundStyle(FactTrailTheme.primaryAction(for: colorScheme))
 
             Spacer()
 
             Text(selectedStyle == .calendar ? "Calendar" : "Timeline")
-                .font(.system(size: 20, weight: .semibold, design: .rounded))
+                .font(.system(size: 20, weight: .semibold, design: .default))
                 .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
 
             Spacer()
@@ -3592,41 +3595,26 @@ private struct TimelineView: View {
     }
 
     private var timelineControls: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
+        HStack(spacing: 8) {
+            TimelineSegmentedControl(
+                selection: $selectedStyle,
+                options: TimelineDisplayStyle.allCases
+            )
+
+            if selectedStyle == .calendar {
                 TimelineSegmentedControl(
-                    selection: $selectedStyle,
-                    options: TimelineDisplayStyle.allCases
+                    selection: $calendarMode,
+                    options: TimelineCalendarMode.allCases
                 )
-
-                if selectedStyle == .calendar {
-                    TimelineSegmentedControl(
-                        selection: $calendarMode,
-                        options: TimelineCalendarMode.allCases
-                    )
-                } else {
-                    TimelineSegmentedControl(
-                        selection: $density,
-                        options: TimelineDensity.allCases
-                    )
-                }
-            }
-            .padding(.horizontal, 20)
-
-            DisclosureGroup {
-                TimelineFilterControls(
-                    selectedCategory: $selectedCategory,
-                    childFilter: $childFilter,
-                    requiresEvidence: $requiresEvidence
+            } else {
+                TimelineSegmentedControl(
+                    selection: $density,
+                    options: TimelineDensity.allCases
                 )
-                .padding(.top, 8)
-            } label: {
-                Text("Filters")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
             }
-            .padding(.horizontal, 20)
         }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 20)
         .padding(.bottom, 8)
     }
 
@@ -3649,12 +3637,7 @@ private struct TimelineView: View {
     }
 
     private var filteredIncidents: [Incident] {
-        incidents.filter { incident in
-            matchesSearch(incident)
-            && matchesCategory(incident)
-            && matchesChildFilter(incident)
-            && matchesEvidenceFilter(incident)
-        }
+        incidents
     }
 
     private var chronologicalItems: [TimelineItem] {
@@ -3693,22 +3676,9 @@ private struct TimelineView: View {
     }
 
     private var filteredTimelineItems: [TimelineItem] {
-        let baseItems = timelineItems.filter { item in
-            switch item {
-            case .incident(let incident):
-                return filteredIncidents.contains { $0.id == incident.id }
-            case .exchangeRecord(let record, _):
-                return selectedCategory == "All"
-                && childFilter != .notChildInvolved
-                && (!requiresEvidence)
-                && matchesSearch(record)
-            case .checkIn(let checkIn):
-                return selectedCategory == "All"
-                && childFilter != .notChildInvolved
-                && (!requiresEvidence)
-                && matchesSearch(checkIn)
-            }
-        }
+        // No search/category filtering — the prototype shows everything, with
+        // "See related entries" (tag match) as the only filter.
+        let baseItems = timelineItems
 
         guard let relatedFilterSource else {
             return baseItems
@@ -3723,90 +3693,6 @@ private struct TimelineView: View {
             item.id != relatedFilterSource.id
             && !Set(item.tags).isDisjoint(with: sourceTags)
         }
-    }
-
-    private func matchesSearch(_ incident: Incident) -> Bool {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !query.isEmpty else {
-            return true
-        }
-
-        let searchableText = [
-            incident.category,
-            incident.originalNotes,
-            incident.finalDocumentationSummary,
-            incident.neutralSummary,
-            incident.aiAnalysis?.understandingSummary.joined(separator: " ") ?? "",
-            incident.aiAnalysis?.evidenceMentioned.joined(separator: " ") ?? "",
-            incident.peopleInvolved,
-            incident.location,
-            incident.evidenceNotes,
-            incident.evidenceTypes.map(\.rawValue).joined(separator: " "),
-            incident.patternTags.map { "\($0.rawValue) \($0.displayName)" }.joined(separator: " "),
-            incident.guidedAnswers.map { "\($0.question) \($0.answer)" }.joined(separator: " ")
-        ].joined(separator: " ").lowercased()
-
-        return searchableText.contains(query)
-    }
-
-    private func matchesSearch(_ record: ExchangeRecord) -> Bool {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !query.isEmpty else {
-            return true
-        }
-
-        let searchableText = [
-            "exchange record",
-            record.role.rawValue,
-            record.timing.rawValue,
-            record.timingDescription,
-            record.address,
-            record.coordinateDescription,
-            record.timeZoneIdentifier
-        ].joined(separator: " ").lowercased()
-
-        return searchableText.contains(query)
-    }
-
-    private func matchesSearch(_ checkIn: CheckIn) -> Bool {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !query.isEmpty else {
-            return true
-        }
-
-        let searchableText = [
-            "check in",
-            checkIn.displayLabel,
-            checkIn.address,
-            checkIn.notes ?? ""
-        ].joined(separator: " ").lowercased()
-
-        return searchableText.contains(query)
-    }
-
-    private func matchesCategory(_ incident: Incident) -> Bool {
-        selectedCategory == "All" || incident.category == selectedCategory
-    }
-
-    private func matchesChildFilter(_ incident: Incident) -> Bool {
-        switch childFilter {
-        case .all:
-            return true
-        case .childInvolved:
-            return incident.childInvolved
-        case .notChildInvolved:
-            return !incident.childInvolved
-        }
-    }
-
-    private func matchesEvidenceFilter(_ incident: Incident) -> Bool {
-        guard requiresEvidence else {
-            return true
-        }
-
-        return !incident.evidenceNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        || !incident.evidenceAttachments.isEmpty
-        || !incident.evidenceTypes.isEmpty
     }
 
     private func beginAddNote(_ item: TimelineItem) {
@@ -3894,7 +3780,7 @@ private struct TimelineSegmentedControl<Option>: View where Option: CaseIterable
                     }
                 } label: {
                     Text(option.rawValue)
-                        .font(.system(size: 12, weight: selection == option ? .semibold : .medium, design: .rounded))
+                        .font(.system(size: 12, weight: selection == option ? .semibold : .medium, design: .default))
                         .foregroundStyle(selection == option ? FactTrailTheme.primaryText(for: colorScheme) : FactTrailTheme.mutedText(for: colorScheme))
                         .padding(.vertical, 6)
                         .padding(.horizontal, 9)
@@ -3927,7 +3813,7 @@ private struct TimelineLegend: View {
             legendItem("Exchange", color: FactTrailTheme.primaryAction(for: colorScheme).opacity(0.72))
             legendItem("Document", color: .green)
         }
-        .font(.system(size: 12, weight: .medium, design: .rounded))
+        .font(.system(size: 12, weight: .medium, design: .default))
         .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
     }
 
@@ -3944,6 +3830,9 @@ private struct TimelineLegend: View {
 
 private struct BranchTimelineView: View {
     let items: [TimelineItem]
+    /// AI-detected pattern markers, interleaved chronologically on the spine.
+    /// Empty until the AI analysis pass is wired up.
+    var annotations: [TimelineAnnotation] = []
     let density: TimelineDensity
     @Binding var expandedItemIDs: Set<String>
     let notesFor: (TimelineItem) -> [LinkedNote]
@@ -3959,7 +3848,7 @@ private struct BranchTimelineView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var containerWidth: CGFloat = 0
 
-    private let gutterWidth: CGFloat = 44
+    private let gutterWidth: CGFloat = 40
 
     private var cardColumnWidth: CGFloat {
         guard containerWidth > gutterWidth else { return 150 }
@@ -3998,6 +3887,13 @@ private struct BranchTimelineView: View {
                         onLongPress: onLongPress
                     )
                     .padding(.bottom, rowBottomPadding(isExpanded: expandedItemIDs.contains(item.id)))
+                case .annotation(let annotation):
+                    TimelineAnnotationRow(
+                        annotation: annotation,
+                        cardColumnWidth: cardColumnWidth,
+                        gutterWidth: gutterWidth
+                    )
+                    .padding(.bottom, 14)
                 }
             }
         }
@@ -4042,8 +3938,15 @@ private struct BranchTimelineView: View {
         var currentYear: Int?
         var currentMonth: Int?
         var itemIndex = 0
+        var pendingAnnotations = annotations.sorted { $0.anchorDate < $1.anchorDate }
 
         for item in items {
+            // Flush AI pattern annotations that belong before this entry.
+            while let next = pendingAnnotations.first, next.anchorDate < item.date {
+                rows.append(.annotation(next))
+                pendingAnnotations.removeFirst()
+            }
+
             let year = Calendar.current.component(.year, from: item.date)
             let month = Calendar.current.component(.month, from: item.date)
             if currentYear != year {
@@ -4059,6 +3962,7 @@ private struct BranchTimelineView: View {
             itemIndex += 1
         }
 
+        rows.append(contentsOf: pendingAnnotations.map { .annotation($0) })
         return rows
     }
 
@@ -4077,6 +3981,62 @@ private enum BranchRow {
     case year(Int)
     case month(String)
     case item(TimelineItem, Int)
+    case annotation(TimelineAnnotation)
+}
+
+/// An AI-generated pattern marker rendered between entries on the branch spine
+/// (prototype: the amber "Pattern of service refusals begins here" flag).
+/// Populated by the AI analysis pass; empty until that is wired up.
+struct TimelineAnnotation: Identifiable, Hashable {
+    let id: UUID
+    let text: String
+    /// Chronological position — the annotation renders after entries dated before this.
+    let anchorDate: Date
+
+    init(id: UUID = UUID(), text: String, anchorDate: Date) {
+        self.id = id
+        self.text = text
+        self.anchorDate = anchorDate
+    }
+}
+
+private struct TimelineAnnotationRow: View {
+    let annotation: TimelineAnnotation
+    let cardColumnWidth: CGFloat
+    let gutterWidth: CGFloat
+    @Environment(\.colorScheme) private var colorScheme
+
+    private let flagAmber = Color(hex: 0xD97706)
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            Color.clear
+                .frame(width: cardColumnWidth, height: 1)
+
+            // Amber flag centered on the spine.
+            Circle()
+                .fill(flagAmber.opacity(0.15))
+                .overlay {
+                    Circle()
+                        .strokeBorder(flagAmber, lineWidth: 1.5)
+                }
+                .overlay {
+                    Image(systemName: "flag")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(flagAmber)
+                }
+                .frame(width: 22, height: 22)
+                .frame(width: gutterWidth, alignment: .center)
+
+            Text(annotation.text)
+                .font(.system(size: 11, weight: .regular, design: .default))
+                .italic()
+                .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                .multilineTextAlignment(.leading)
+                .frame(width: cardColumnWidth, alignment: .leading)
+                .padding(.top, 2)
+        }
+    }
 }
 
 private struct BranchTimelineRow: View {
@@ -4138,11 +4098,17 @@ private struct BranchTimelineRow: View {
                 .padding(.top, 30)
                 .offset(x: isLeft ? -15 : 15)
 
+            // Prototype node: filled colored dot, thin surface gap, colored outer ring.
             Circle()
-                .strokeBorder(item.timelineColor(for: colorScheme), lineWidth: 2)
+                .fill(item.timelineColor(for: colorScheme))
+                .frame(width: 9, height: 9)
+                .padding(2.5)
                 .background(Circle().fill(FactTrailTheme.surface(for: colorScheme)))
-                .frame(width: 18, height: 18)
-                .padding(.top, 22)
+                .overlay {
+                    Circle()
+                        .strokeBorder(item.timelineColor(for: colorScheme), lineWidth: 1.5)
+                }
+                .padding(.top, 24)
         }
         .frame(width: gutterWidth, alignment: .top)
     }
@@ -4245,28 +4211,37 @@ private struct TimelineItemCard: View {
     var body: some View {
         Button(action: onToggle) {
             VStack(alignment: .leading, spacing: density == .compact ? 7 : 9) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Circle()
                         .fill(item.timelineColor(for: colorScheme))
                         .frame(width: 8, height: 8)
+                    // Header sized to the prototype's ~10px so the category label and the
+                    // timestamp both fit on one line even in the narrow branch card (where the
+                    // time would otherwise wrap to "Mon / 9:13 / PM"). minimumScaleFactor is a
+                    // safety net for the tightest widths.
                     Text(item.typeLabel.uppercased())
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .tracking(1.6)
+                        .font(.system(size: 10, weight: .semibold, design: .default))
+                        .tracking(0.6)
                         .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
-                    Spacer(minLength: 8)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.55)
+                    Spacer(minLength: 6)
                     Text(DateFormatter.factTrailCompactDateTime.string(from: item.date))
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .font(.system(size: 10, weight: .medium, design: .default))
                         .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .layoutPriority(1)
                 }
 
                 Text(item.title)
-                    .font(.system(size: density == .compact ? 15 : 16, weight: .semibold, design: .rounded))
+                    .font(.system(size: density == .compact ? 15 : 16, weight: .semibold, design: .default))
                     .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                     .lineLimit(density == .compact ? 2 : 3)
 
                 if density == .detailed {
                     Text(item.summary)
-                        .font(.system(size: 13, weight: .regular, design: .rounded))
+                        .font(.system(size: 13, weight: .regular, design: .default))
                         .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
                         .lineLimit(isExpanded ? nil : 3)
                         .fixedSize(horizontal: false, vertical: true)
@@ -4325,8 +4300,10 @@ private struct TimelineBadges: View {
 
     private func badge(_ text: String, systemImage: String) -> some View {
         Label(text, systemImage: systemImage)
-            .font(.system(size: 11, weight: .semibold, design: .rounded))
+            .font(.system(size: 11, weight: .semibold, design: .default))
             .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .padding(.vertical, 4)
             .padding(.horizontal, 8)
             .background(
@@ -4380,7 +4357,7 @@ private struct TimelineExpandedDetails: View {
                 onAddNote(item)
             } label: {
                 Text("Add note")
-                    .font(.system(size: 12.5, weight: .medium, design: .rounded))
+                    .font(.system(size: 12.5, weight: .medium, design: .default))
                     .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                     .padding(.vertical, 7)
                     .padding(.horizontal, 16)
@@ -4433,7 +4410,7 @@ private struct TimelineStatusChips: View {
         }()
 
         return Text(text)
-            .font(.system(size: 11, weight: .medium, design: .rounded))
+            .font(.system(size: 11, weight: .medium, design: .default))
             .foregroundStyle(foreground)
             .padding(.vertical, 4)
             .padding(.horizontal, 10)
@@ -4451,15 +4428,15 @@ private struct RelatedEntriesFilterBanner: View {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Related entries")
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .font(.system(size: 16, weight: .semibold, design: .default))
                         .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                     Text("Showing entries related to: \(source.title)")
-                        .font(.system(size: 12, weight: .regular, design: .rounded))
+                        .font(.system(size: 12, weight: .regular, design: .default))
                         .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
                         .lineLimit(2)
                     if source.tags.isEmpty {
                         Text("This entry does not have tags yet.")
-                            .font(.system(size: 11.5, weight: .medium, design: .rounded))
+                            .font(.system(size: 11.5, weight: .medium, design: .default))
                             .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
                     }
                 }
@@ -4490,12 +4467,12 @@ private struct TimelineEmptyState: View {
                 .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
 
             Text(title)
-                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .font(.system(size: 20, weight: .bold, design: .default))
                 .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                 .multilineTextAlignment(.center)
 
             Text(message)
-                .font(.system(size: 14, weight: .regular, design: .rounded))
+                .font(.system(size: 14, weight: .regular, design: .default))
                 .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -4513,7 +4490,7 @@ private struct EntryTagChips: View {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 86), spacing: 6)], alignment: .leading, spacing: 6) {
                 ForEach(tags) { tag in
                     Text(tag.displayName)
-                        .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                        .font(.system(size: 10.5, weight: .semibold, design: .default))
                         .foregroundStyle(FactTrailTheme.primaryAction(for: colorScheme))
                         .lineLimit(1)
                         .padding(.vertical, 4)
@@ -4544,7 +4521,7 @@ private struct TimelineMoreInfoSheet: View {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(item.title)
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .font(.system(size: 24, weight: .bold, design: .default))
                         .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                         .fixedSize(horizontal: false, vertical: true)
 
@@ -4629,16 +4606,16 @@ private struct TimelineAddNoteSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Add note")
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .font(.system(size: 24, weight: .bold, design: .default))
                     .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                 Text(item.title)
-                    .font(.system(size: 13, weight: .regular, design: .rounded))
+                    .font(.system(size: 13, weight: .regular, design: .default))
                     .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
                     .lineLimit(2)
             }
 
             TextEditor(text: $noteText)
-                .font(.system(size: 15, weight: .regular, design: .rounded))
+                .font(.system(size: 15, weight: .regular, design: .default))
                 .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                 .frame(minHeight: 140)
                 .padding(10)
@@ -4664,7 +4641,7 @@ private struct TimelineAddNoteSheet: View {
             Button("Cancel") {
                 onCancel()
             }
-            .font(.system(size: 15, weight: .semibold, design: .rounded))
+            .font(.system(size: 15, weight: .semibold, design: .default))
             .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
             .frame(maxWidth: .infinity)
         }
@@ -4691,7 +4668,7 @@ private struct TimelineYearPill: View {
 
     var body: some View {
         Text(verbatim: String(year))
-            .font(.system(size: 13, weight: .bold, design: .rounded))
+            .font(.system(size: 13, weight: .bold, design: .default))
             .tracking(2)
             .foregroundStyle(FactTrailTheme.background(for: colorScheme))
             .padding(.vertical, 7)
@@ -4707,7 +4684,7 @@ private struct TimelineMonthLabel: View {
 
     var body: some View {
         Text(month)
-            .font(.system(size: 13, weight: .bold, design: .rounded))
+            .font(.system(size: 13, weight: .bold, design: .default))
             .tracking(2.4)
             .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
             .frame(maxWidth: .infinity)
@@ -4730,7 +4707,7 @@ private struct CalendarTimelineView: View {
                 calendarLegend("Nathan's days", color: FactTrailTheme.primaryAction(for: colorScheme).opacity(0.12))
                 calendarLegend("Exchange", color: FactTrailTheme.aiAccent(for: colorScheme).opacity(0.24), stroked: true)
             }
-            .font(.system(size: 12, weight: .medium, design: .rounded))
+            .font(.system(size: 12, weight: .medium, design: .default))
             .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
 
             if mode == .month {
@@ -4758,7 +4735,7 @@ private struct CalendarTimelineView: View {
             Spacer()
 
             Text(monthTitle)
-                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .font(.system(size: 20, weight: .bold, design: .default))
                 .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
 
             Spacer()
@@ -4777,7 +4754,7 @@ private struct CalendarTimelineView: View {
             HStack {
                 ForEach(shortWeekdays, id: \.self) { day in
                     Text(day)
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .font(.system(size: 12, weight: .bold, design: .default))
                         .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
                         .frame(maxWidth: .infinity)
                 }
@@ -4852,10 +4829,10 @@ private struct CalendarTimelineView: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(selectedDate.formatted(.dateTime.weekday(.wide).month(.wide).day().year()))
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .font(.system(size: 18, weight: .bold, design: .default))
                     .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                 Text(isExchangeDay(selectedDate) ? "Exchange day" : "Parenting day")
-                    .font(.system(size: 13, weight: .regular, design: .rounded))
+                    .font(.system(size: 13, weight: .regular, design: .default))
                     .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
             }
             .padding(14)
@@ -4876,7 +4853,7 @@ private struct CalendarTimelineView: View {
                             .frame(width: 10, height: 10)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(item.title)
-                                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                                .font(.system(size: 15, weight: .semibold, design: .default))
                                 .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                             Text("\(item.typeLabel) · \(DateFormatter.factTrailCompactDateTime.string(from: item.date))")
                                 .font(.caption)
@@ -4976,7 +4953,7 @@ private struct CalendarDayCell: View {
         Button(action: onSelect) {
             VStack(spacing: 4) {
                 Text(date.formatted(.dateTime.day()))
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .font(.system(size: 13, weight: .semibold, design: .default))
                     .foregroundStyle(isSelected ? .white : dayTextColor)
                     .frame(width: 28, height: 28)
                     .background(
@@ -5032,35 +5009,6 @@ private extension TimelineItem {
         case .checkIn:
             return FactTrailTheme.aiAccent(for: colorScheme)
         }
-    }
-}
-
-private struct TimelineFilterControls: View {
-    @Binding var selectedCategory: String
-    @Binding var childFilter: ChildFilter
-    @Binding var requiresEvidence: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Picker("Category", selection: $selectedCategory) {
-                Text("All").tag("All")
-                ForEach(IncidentCategory.allCases) { category in
-                    Text(category.rawValue).tag(category.rawValue)
-                }
-            }
-            .pickerStyle(.menu)
-
-            Picker("Child Involved", selection: $childFilter) {
-                ForEach(ChildFilter.allCases) { filter in
-                    Text(filter.rawValue).tag(filter)
-                }
-            }
-            .pickerStyle(.segmented)
-
-            Toggle("Evidence exists", isOn: $requiresEvidence)
-        }
-        .padding()
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -5353,10 +5301,10 @@ private struct TimelineDetailSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .font(.system(size: 13, weight: .semibold, design: .default))
                 .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
             Text(displayValue)
-                .font(.system(size: 13, weight: .regular, design: .rounded))
+                .font(.system(size: 13, weight: .regular, design: .default))
                 .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -5376,10 +5324,10 @@ private struct TimelineDetailRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
-                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .font(.system(size: 11, weight: .medium, design: .default))
                 .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
             Text(displayValue)
-                .font(.system(size: 13, weight: .regular, design: .rounded))
+                .font(.system(size: 13, weight: .regular, design: .default))
                 .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -5399,10 +5347,10 @@ private struct TimelineNotesInlineSection: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Text("Notes")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .font(.system(size: 13, weight: .semibold, design: .default))
                     .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                 Text("\(notes.count)")
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .font(.system(size: 11, weight: .medium, design: .default))
                     .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
                     .padding(.vertical, 2)
                     .padding(.horizontal, 7)
@@ -5416,11 +5364,11 @@ private struct TimelineNotesInlineSection: View {
                 ForEach(notes) { note in
                     VStack(alignment: .leading, spacing: 3) {
                         Text(note.text)
-                            .font(.system(size: 12.5, weight: .regular, design: .rounded))
+                            .font(.system(size: 12.5, weight: .regular, design: .default))
                             .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                             .fixedSize(horizontal: false, vertical: true)
                         Text(DateFormatter.factTrailCompactDateTime.string(from: note.createdAt))
-                            .font(.system(size: 10.5, weight: .regular, design: .rounded))
+                            .font(.system(size: 10.5, weight: .regular, design: .default))
                             .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
                     }
                     .padding(10)
@@ -5448,14 +5396,17 @@ private struct TimelineAttachmentsSection: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Text("Attachments")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
-                if !attachments.isEmpty {
+        // Only show the Attachments section when the entry actually has attachments.
+        // Attachments are added when logging an entry, not from the timeline, so there
+        // are no "add screenshot / add photo" tiles here — only thumbnails of what exists.
+        if !attachments.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Text("Attachments")
+                        .font(.system(size: 13, weight: .semibold, design: .default))
+                        .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                     Text("\(attachments.count)")
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .font(.system(size: 11, weight: .medium, design: .default))
                         .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
                         .padding(.vertical, 2)
                         .padding(.horizontal, 7)
@@ -5463,54 +5414,17 @@ private struct TimelineAttachmentsSection: View {
                             Capsule().fill(FactTrailTheme.aiSoftBackground(for: colorScheme).opacity(0.78))
                         )
                 }
-            }
 
-            LazyVGrid(columns: columns, spacing: 8) {
-                ForEach(attachments) { attachment in
-                    TimelineAttachmentThumbnailTile(document: attachment)
-                        .onTapGesture {
-                            onAttachmentTapped(attachment)
-                        }
-                }
-
-                Button(action: onChooseFromPhotos) {
-                    TimelineAttachmentActionTile(iconName: "text.bubble", label: "Screenshot")
-                }
-                .buttonStyle(.plain)
-
-                if let onTakePhoto {
-                    Button(action: onTakePhoto) {
-                        TimelineAttachmentActionTile(iconName: "photo", label: "Photo")
+                LazyVGrid(columns: columns, spacing: 8) {
+                    ForEach(attachments) { attachment in
+                        TimelineAttachmentThumbnailTile(document: attachment)
+                            .onTapGesture {
+                                onAttachmentTapped(attachment)
+                            }
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
-    }
-}
-
-private struct TimelineAttachmentActionTile: View {
-    let iconName: String
-    let label: String
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        VStack(spacing: 6) {
-            Image(systemName: iconName)
-                .font(.system(size: 24, weight: .regular))
-                .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
-
-            Text(label)
-                .font(.system(size: 11, weight: .medium, design: .rounded))
-                .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: 78)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(FactTrailTheme.aiSoftBackground(for: colorScheme).opacity(0.75))
-        )
     }
 }
 
@@ -5530,7 +5444,7 @@ private struct TimelineAttachmentThumbnailTile: View {
                 }
 
             Text(label)
-                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .font(.system(size: 10, weight: .medium, design: .default))
                 .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
                 .lineLimit(1)
         }
@@ -5655,7 +5569,7 @@ private struct TimelineActionMenu: View {
                     .frame(width: 20, alignment: .center)
 
                 Text(label)
-                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .font(.system(size: 15, weight: .medium, design: .default))
                     .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
 
                 Spacer(minLength: 0)
@@ -5697,14 +5611,14 @@ private struct TimelineAttachmentPreviewSheet: View {
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(document.title)
-                            .font(.system(size: 18, weight: .semibold, design: .rounded))
+                            .font(.system(size: 18, weight: .semibold, design: .default))
                             .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                         Text(document.fileName)
-                            .font(.system(size: 12, weight: .regular, design: .rounded))
+                            .font(.system(size: 12, weight: .regular, design: .default))
                             .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
                             .lineLimit(1)
                         Text(DateFormatter.factTrailDateTime.string(from: document.importedAt))
-                            .font(.system(size: 12, weight: .regular, design: .rounded))
+                            .font(.system(size: 12, weight: .regular, design: .default))
                             .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -5761,7 +5675,7 @@ private struct TimelineAttachmentPreviewSheet: View {
                     .font(.system(size: 44, weight: .regular))
                     .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
                 Text(document.fileType.displayName)
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .font(.system(size: 13, weight: .semibold, design: .default))
                     .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
             }
             .frame(maxWidth: .infinity)
@@ -5784,8 +5698,8 @@ private struct TimelinePDFShareButton: View {
             if let pdfURL {
                 ShareLink(
                     item: pdfURL,
-                    subject: Text("FactTrail Summary"),
-                    message: Text("FactTrail documentation summary")
+                    subject: Text("Coparo Summary"),
+                    message: Text("Coparo documentation summary")
                 ) {
                     Label("Export PDF", systemImage: "square.and.arrow.up")
                         .frame(maxWidth: .infinity)
@@ -5831,8 +5745,8 @@ private struct TimelineFullPDFShareButton: View {
             if let pdfURL {
                 ShareLink(
                     item: pdfURL,
-                    subject: Text("FactTrail Timeline"),
-                    message: Text("FactTrail timeline export")
+                    subject: Text("Coparo Timeline"),
+                    message: Text("Coparo timeline export")
                 ) {
                     Label("Export Full Timeline PDF", systemImage: "square.and.arrow.up")
                         .frame(maxWidth: .infinity)

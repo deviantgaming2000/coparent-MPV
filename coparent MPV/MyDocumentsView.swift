@@ -103,14 +103,14 @@ struct MyDocumentsView: View {
             } label: {
                 Label("Back", systemImage: "chevron.left")
                     .labelStyle(.titleAndIcon)
-                    .font(.system(size: 17, weight: .medium, design: .rounded))
+                    .font(.system(size: 17, weight: .medium, design: .default))
             }
             .foregroundStyle(FactTrailTheme.primaryAction(for: colorScheme))
 
             Spacer()
 
             Text("My documents")
-                .font(.system(size: 20, weight: .semibold, design: .rounded))
+                .font(.system(size: 20, weight: .semibold, design: .default))
                 .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
 
             Spacer()
@@ -204,7 +204,7 @@ struct MyDocumentsView: View {
             selectedCategory = category
         } label: {
             Text(label)
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .font(.system(size: 12, weight: .semibold, design: .default))
                 .foregroundStyle(isSelected ? FactTrailTheme.background(for: colorScheme) : FactTrailTheme.primaryText(for: colorScheme))
                 .padding(.vertical, 6)
                 .padding(.horizontal, 12)
@@ -243,10 +243,10 @@ struct MyDocumentsView: View {
                 .font(.system(size: 48, weight: .regular))
                 .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
             Text("No documents yet")
-                .font(.system(size: 20, weight: .semibold, design: .rounded))
+                .font(.system(size: 20, weight: .semibold, design: .default))
                 .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
             Text("Add screenshots, files, and supporting records so they're easy to find when you need them.")
-                .font(.system(size: 14, weight: .regular, design: .rounded))
+                .font(.system(size: 14, weight: .regular, design: .default))
                 .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
@@ -273,10 +273,10 @@ struct MyDocumentsView: View {
                 .font(.system(size: 40, weight: .regular))
                 .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
             Text("No matching documents")
-                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .font(.system(size: 16, weight: .semibold, design: .default))
                 .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
             Text("Try clearing the search or filter.")
-                .font(.system(size: 13, weight: .regular, design: .rounded))
+                .font(.system(size: 13, weight: .regular, design: .default))
                 .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
             Spacer()
         }
@@ -304,7 +304,7 @@ private struct DocumentRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(document.title)
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .font(.system(size: 16, weight: .semibold, design: .default))
                         .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                         .lineLimit(2)
                     if document.isFlagged {
@@ -317,7 +317,7 @@ private struct DocumentRow: View {
                 HStack(spacing: 6) {
                     Label(document.category.displayName, systemImage: document.category.systemImage)
                         .labelStyle(.titleAndIcon)
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .font(.system(size: 11, weight: .semibold, design: .default))
                         .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
                         .padding(.vertical, 3)
                         .padding(.horizontal, 8)
@@ -325,13 +325,13 @@ private struct DocumentRow: View {
                             Capsule().fill(FactTrailTheme.aiSoftBackground(for: colorScheme))
                         )
                     Text(DateFormatter.factTrailDateTime.string(from: document.importedAt))
-                        .font(.system(size: 11, weight: .regular, design: .rounded))
+                        .font(.system(size: 11, weight: .regular, design: .default))
                         .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
                 }
 
                 if let notes = document.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
                     Text(notes)
-                        .font(.system(size: 12, weight: .regular, design: .rounded))
+                        .font(.system(size: 12, weight: .regular, design: .default))
                         .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
                         .lineLimit(2)
                 }
@@ -475,7 +475,7 @@ struct AddDocumentSheet: View {
     private var sourcePickerSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Choose source")
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .font(.system(size: 14, weight: .semibold, design: .default))
                 .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
 
             HStack(spacing: 10) {
@@ -502,10 +502,10 @@ struct AddDocumentSheet: View {
                 selectedSourcePreview {
                     VStack(alignment: .leading, spacing: 4) {
                         Label(pickedFileURL.lastPathComponent, systemImage: "doc.text")
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .font(.system(size: 14, weight: .semibold, design: .default))
                             .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                         Text(pickedFileURL.pathExtension.uppercased())
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .font(.system(size: 11, weight: .semibold, design: .default))
                             .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -521,7 +521,7 @@ struct AddDocumentSheet: View {
                 .font(.system(size: 22, weight: .semibold))
                 .foregroundStyle(FactTrailTheme.primaryAction(for: colorScheme))
             Text(title)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .font(.system(size: 13, weight: .semibold, design: .default))
                 .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
         }
         .frame(maxWidth: .infinity)
@@ -555,7 +555,7 @@ struct AddDocumentSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Title")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .font(.system(size: 13, weight: .semibold, design: .default))
                     .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
                 TextField("e.g. School email June 3", text: $title)
                     .textFieldStyle(.plain)
@@ -573,7 +573,7 @@ struct AddDocumentSheet: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("Category")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .font(.system(size: 13, weight: .semibold, design: .default))
                     .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
                 Menu {
                     ForEach(DocumentCategory.allCases) { option in
@@ -586,7 +586,7 @@ struct AddDocumentSheet: View {
                 } label: {
                     HStack {
                         Label(category.displayName, systemImage: category.systemImage)
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .font(.system(size: 14, weight: .semibold, design: .default))
                             .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                         Spacer()
                         Image(systemName: "chevron.up.chevron.down")
@@ -608,7 +608,7 @@ struct AddDocumentSheet: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("Notes")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .font(.system(size: 13, weight: .semibold, design: .default))
                     .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
                 TextEditor(text: $notes)
                     .frame(minHeight: 90)
@@ -824,11 +824,11 @@ struct DocumentDetailView: View {
                         .font(.system(size: 48, weight: .regular))
                         .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
                     Text(document.fileName)
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .font(.system(size: 13, weight: .semibold, design: .default))
                         .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                         .lineLimit(1)
                     Text("Tap to preview")
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .font(.system(size: 11, weight: .medium, design: .default))
                         .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
                 }
                 .frame(maxWidth: .infinity)
@@ -849,7 +849,7 @@ struct DocumentDetailView: View {
                     .font(.system(size: 40, weight: .regular))
                     .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
                 Text("File not found")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .font(.system(size: 13, weight: .semibold, design: .default))
                     .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
             }
             .frame(maxWidth: .infinity)
@@ -880,7 +880,7 @@ struct DocumentDetailView: View {
                     } label: {
                         HStack {
                             Label(editableCategory.displayName, systemImage: editableCategory.systemImage)
-                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                .font(.system(size: 14, weight: .semibold, design: .default))
                                 .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                             Spacer()
                             Image(systemName: "chevron.up.chevron.down")
@@ -902,14 +902,14 @@ struct DocumentDetailView: View {
                 }
                 Toggle(isOn: $isFlagged) {
                     Label("Flag as important", systemImage: "flag")
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .font(.system(size: 14, weight: .semibold, design: .default))
                 }
             }
         } else {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(document.title)
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .font(.system(size: 22, weight: .bold, design: .default))
                         .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                     if document.isFlagged {
                         Image(systemName: "flag.fill")
@@ -919,12 +919,12 @@ struct DocumentDetailView: View {
 
                 HStack(spacing: 8) {
                     Label(document.category.displayName, systemImage: document.category.systemImage)
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .font(.system(size: 12, weight: .semibold, design: .default))
                         .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
                         .padding(.vertical, 4).padding(.horizontal, 10)
                         .background(Capsule().fill(FactTrailTheme.aiSoftBackground(for: colorScheme)))
                     Label(document.fileType.displayName, systemImage: document.fileType.systemImage)
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .font(.system(size: 12, weight: .semibold, design: .default))
                         .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                         .padding(.vertical, 4).padding(.horizontal, 10)
                         .background(Capsule().fill(FactTrailTheme.surface(for: colorScheme)))
@@ -962,7 +962,7 @@ struct DocumentDetailView: View {
     private func labeled<V: View>(_ label: String, @ViewBuilder content: () -> V) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .font(.system(size: 13, weight: .semibold, design: .default))
                 .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
             content()
         }

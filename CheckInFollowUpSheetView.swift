@@ -42,13 +42,13 @@ struct CheckInFollowUpSheetView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Anything to add?")
-                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .font(.system(size: 20, weight: .bold, design: .default))
                 .lineSpacing(2)
                 .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                 .fixedSize(horizontal: false, vertical: true)
 
             Text("Your last check-in is saved. Add a note, start an incident, or mark it complete.")
-                .font(.system(size: 14, weight: .regular, design: .rounded))
+                .font(.system(size: 14, weight: .regular, design: .default))
                 .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -66,11 +66,11 @@ struct CheckInFollowUpSheetView: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(checkIn.displayLabel)
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .font(.system(size: 16, weight: .semibold, design: .default))
                         .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
 
                     Text(DateFormatter.factTrailDateTime.string(from: checkIn.createdAt))
-                        .font(.system(size: 13, weight: .regular, design: .rounded))
+                        .font(.system(size: 13, weight: .regular, design: .default))
                         .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
                 }
             }
@@ -78,7 +78,7 @@ struct CheckInFollowUpSheetView: View {
             let address = checkIn.address.trimmingCharacters(in: .whitespacesAndNewlines)
             if !address.isEmpty {
                 Text(address)
-                    .font(.system(size: 13, weight: .regular, design: .rounded))
+                    .font(.system(size: 13, weight: .regular, design: .default))
                     .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -127,11 +127,11 @@ struct CheckInFollowUpSheetView: View {
     private var noteEditor: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Add a note")
-                .font(.system(size: 18, weight: .semibold, design: .rounded))
+                .font(.system(size: 18, weight: .semibold, design: .default))
                 .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
 
             TextEditor(text: $noteText)
-                .font(.system(size: 16, weight: .regular, design: .rounded))
+                .font(.system(size: 16, weight: .regular, design: .default))
                 .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                 .scrollContentBackground(.hidden)
                 .frame(minHeight: 140)

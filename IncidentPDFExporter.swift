@@ -3,7 +3,7 @@ import UIKit
 
 enum IncidentPDFExporter {
     static func makeTimelinePDF(for incidents: [Incident]) throws -> URL {
-        let fileName = "FactTrail-Timeline-\(Date().timeIntervalSince1970).pdf"
+        let fileName = "Coparo-Timeline-\(Date().timeIntervalSince1970).pdf"
         let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
         let pageBounds = CGRect(x: 0, y: 0, width: 612, height: 792)
         let renderer = UIGraphicsPDFRenderer(bounds: pageBounds)
@@ -12,7 +12,7 @@ enum IncidentPDFExporter {
             let writer = PDFPageWriter(context: context, pageBounds: pageBounds)
 
             writer.startPage()
-            writer.addTitle("FactTrail Timeline")
+            writer.addTitle("Coparo Timeline")
             writer.addText("Exported: \(DateFormatter.factTrailDateTime.string(from: Date()))", font: .systemFont(ofSize: 11), color: .secondaryLabel)
             writer.addText("Number of events: \(incidents.count)", font: .systemFont(ofSize: 11), color: .secondaryLabel)
             writer.addSpacing(12)
@@ -103,7 +103,7 @@ enum IncidentPDFExporter {
     }
 
     static func makePDF(for summaryDraft: IncidentSummaryDraft) throws -> URL {
-        let fileName = "FactTrail-Summary-\(summaryDraft.draft.incidentDate.timeIntervalSince1970).pdf"
+        let fileName = "Coparo-Summary-\(summaryDraft.draft.incidentDate.timeIntervalSince1970).pdf"
         let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
         let pageBounds = CGRect(x: 0, y: 0, width: 612, height: 792)
         let renderer = UIGraphicsPDFRenderer(bounds: pageBounds)
@@ -112,7 +112,7 @@ enum IncidentPDFExporter {
             let writer = PDFPageWriter(context: context, pageBounds: pageBounds)
 
             writer.startPage()
-            writer.addTitle("FactTrail Summary")
+            writer.addTitle("Coparo Summary")
             writer.addText("Created: \(DateFormatter.factTrailDateTime.string(from: Date()))", font: .systemFont(ofSize: 11), color: .secondaryLabel)
             writer.addSpacing(12)
 

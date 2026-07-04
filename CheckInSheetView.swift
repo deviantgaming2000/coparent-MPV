@@ -63,7 +63,7 @@ struct CheckInSheetView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 12) {
                 Text("What's this check-in for?")
-                    .font(.system(size: 25, weight: .bold, design: .rounded))
+                    .font(.system(size: 25, weight: .bold, design: .default))
                     .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -74,7 +74,7 @@ struct CheckInSheetView: View {
             }
 
             Text("Pick one — we'll save your location and time automatically.")
-                .font(.system(size: 16, weight: .regular, design: .rounded))
+                .font(.system(size: 16, weight: .regular, design: .default))
                 .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
                 .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
@@ -94,7 +94,7 @@ struct CheckInSheetView: View {
                 .frame(width: 13, height: 13)
 
             Text(locationStatusText)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .font(.system(size: 13, weight: .semibold, design: .default))
                 .lineLimit(1)
         }
         .foregroundStyle(locationStatusColor)
@@ -128,7 +128,7 @@ struct CheckInSheetView: View {
         if selectedCategory == .other {
             TextField("What is this check-in for?", text: $customLabel)
                 .textInputAutocapitalization(.sentences)
-                .font(.system(size: 15, weight: .regular, design: .rounded))
+                .font(.system(size: 15, weight: .regular, design: .default))
                 .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                 .padding(14)
                 .background(FactTrailTheme.background(for: colorScheme), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -163,7 +163,7 @@ struct CheckInSheetView: View {
         Button("Cancel") {
             dismiss()
         }
-        .font(.system(size: 16, weight: .semibold, design: .rounded))
+        .font(.system(size: 16, weight: .semibold, design: .default))
         .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
         .buttonStyle(.plain)
         .frame(maxWidth: .infinity)
@@ -219,7 +219,7 @@ private struct CheckInCategoryChip: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .font(.system(size: 14, weight: .semibold, design: .default))
                 .foregroundStyle(isSelected ? FactTrailTheme.aiAccent(for: colorScheme) : FactTrailTheme.primaryText(for: colorScheme))
                 .padding(.horizontal, 14)
                 .padding(.vertical, 11)
@@ -256,7 +256,7 @@ private struct CheckInCategoryCard: View {
                     .background(iconBackground, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
 
                 Text(category.displayName)
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .font(.system(size: 15, weight: .semibold, design: .default))
                     .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                     .multilineTextAlignment(.leading)
                     .lineLimit(2)
@@ -338,11 +338,11 @@ private struct CheckInConfirmationView: View {
 
             VStack(spacing: 8) {
                 Text("Checked in.")
-                    .font(.system(size: 30, weight: .bold, design: .rounded))
+                    .font(.system(size: 30, weight: .bold, design: .default))
                     .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
 
                 Text("Location and time are saved.")
-                    .font(.system(size: 21, weight: .regular, design: .rounded))
+                    .font(.system(size: 21, weight: .regular, design: .default))
                     .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
                     .multilineTextAlignment(.center)
             }
@@ -355,7 +355,7 @@ private struct CheckInConfirmationView: View {
             .frame(maxWidth: .infinity)
 
             Text("We'll ask if anything worth noting happened the next time you open the app.")
-                .font(.system(size: 17, weight: .regular, design: .rounded))
+                .font(.system(size: 17, weight: .regular, design: .default))
                 .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
                 .lineSpacing(4)
                 .multilineTextAlignment(.leading)
@@ -366,7 +366,7 @@ private struct CheckInConfirmationView: View {
 
             Button(action: onDone) {
                 Text("Done")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .font(.system(size: 20, weight: .bold, design: .default))
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(FactTrailPrimaryButtonStyle())
@@ -391,7 +391,7 @@ private struct CheckInTag: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 15, weight: .semibold, design: .rounded))
+            .font(.system(size: 15, weight: .semibold, design: .default))
             .foregroundStyle(textColor)
             .lineLimit(1)
             .minimumScaleFactor(0.82)
