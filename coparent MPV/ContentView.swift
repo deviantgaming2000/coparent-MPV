@@ -670,6 +670,8 @@ struct ContentView: View {
         checkInStore.deleteAll()
         documentStore.deleteAll()
         UserDefaults.standard.removeObject(forKey: linkedNotesStorageKey)
+        UserDefaults.standard.removeObject(forKey: PeopleStore.key)
+        CustodyScheduleStore.clear()
 
         incidents = []
         exchangeRecords = []
@@ -5337,18 +5339,13 @@ private struct CalendarTimelineView: View {
     @Binding var selectedDate: Date
     @Environment(\.colorScheme) private var colorScheme
     @State private var visibleMonth = Date()
+    @State private var custodySchedule: CustodySchedule? = CustodyScheduleStore.load()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             monthHeader
 
-            HStack(spacing: 14) {
-                calendarLegend("Your days", color: FactTrailTheme.primaryAction(for: colorScheme).opacity(0.20))
-                calendarLegend("Co-parent's days", color: FactTrailTheme.primaryAction(for: colorScheme).opacity(0.12))
-                calendarLegend("Exchange", color: FactTrailTheme.aiAccent(for: colorScheme).opacity(0.24), stroked: true)
-            }
-            .font(.system(size: 12, weight: .medium, design: .default))
-            .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+            legendRow
 
             if mode == .month {
                 monthGrid
@@ -5360,6 +5357,31 @@ private struct CalendarTimelineView: View {
         }
         .onAppear {
             visibleMonth = selectedDate
+            custodySchedule = CustodyScheduleStore.load()
+        }
+    }
+
+    @ViewBuilder
+    private var legendRow: some View {
+        if let schedule = custodySchedule {
+            let shown = schedule.caregivers.filter { caregiver in
+                schedule.cycle.contains(caregiver.id) || schedule.overrides.values.contains(caregiver.id)
+            }
+            FlexibleWrap(spacing: 12) {
+                ForEach(shown) { caregiver in
+                    calendarLegend(
+                        caregiver.id == CustodyCaregiver.youID ? "Your days" : caregiver.name,
+                        color: CustodyPalette.color(caregiver.colorIndex).opacity(0.28)
+                    )
+                }
+                calendarLegend("Exchange", color: FactTrailTheme.aiAccent(for: colorScheme).opacity(0.24), stroked: true)
+            }
+            .font(.system(size: 12, weight: .medium, design: .default))
+            .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+        } else {
+            Text("Set a custody schedule in Menu → Custody schedule to color-code whose day each day is.")
+                .font(.system(size: 12, weight: .regular, design: .default))
+                .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
         }
     }
 
@@ -5407,7 +5429,8 @@ private struct CalendarTimelineView: View {
                         visibleMonth: visibleMonth,
                         isSelected: Calendar.current.isDate(date, inSameDayAs: selectedDate),
                         items: items(on: date),
-                        isExchangeDay: isExchangeDay(date)
+                        isExchangeDay: isExchangeDay(date) || isCustodyExchange(date),
+                        custodyColor: custodyColor(on: date)
                     ) {
                         selectedDate = date
                     }
@@ -5471,11 +5494,15 @@ private struct CalendarTimelineView: View {
                 Text(selectedDate.formatted(.dateTime.weekday(.wide).month(.wide).day().year()))
                     .font(.system(size: 18, weight: .bold, design: .default))
                     .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
-                Text(isExchangeDay(selectedDate) ? "Exchange day" : "Parenting day")
+                Text(selectedDaySubtitle)
                     .font(.system(size: 13, weight: .regular, design: .default))
                     .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
             }
             .padding(14)
+
+            if let schedule = custodySchedule {
+                custodyControlRow(schedule: schedule)
+            }
 
             Divider()
 
@@ -5510,6 +5537,64 @@ private struct CalendarTimelineView: View {
             }
         }
         .factTrailGlassCard(cornerRadius: 16)
+    }
+
+    private var selectedDaySubtitle: String {
+        var parts: [String] = []
+        if let caregiver = custodyCaregiver(on: selectedDate) {
+            parts.append(caregiver.id == CustodyCaregiver.youID ? "Your day" : "\(caregiver.name)'s day")
+        } else {
+            parts.append("Parenting day")
+        }
+        if isExchangeDay(selectedDate) || isCustodyExchange(selectedDate) {
+            parts.append("Exchange day")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func custodyControlRow(schedule: CustodySchedule) -> some View {
+        let currentID = schedule.caregiverID(on: selectedDate)
+        let isOverridden = schedule.overrides[CustodySchedule.dateKey(for: selectedDate)] != nil
+        return HStack(spacing: 10) {
+            if let caregiver = custodyCaregiver(on: selectedDate) {
+                Circle()
+                    .fill(CustodyPalette.color(caregiver.colorIndex))
+                    .frame(width: 12, height: 12)
+                Text(caregiver.id == CustodyCaregiver.youID ? "You have the kids" : "\(caregiver.name) has the kids")
+                    .font(.system(size: 13, weight: .medium, design: .default))
+                    .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+            }
+            Spacer()
+            Menu {
+                ForEach(schedule.caregivers) { caregiver in
+                    let name = caregiver.id == CustodyCaregiver.youID ? "\(caregiver.name) (you)" : caregiver.name
+                    Button {
+                        setCustodyOverride(caregiver.id, for: selectedDate)
+                    } label: {
+                        if currentID == caregiver.id {
+                            Label(name, systemImage: "checkmark")
+                        } else {
+                            Text(name)
+                        }
+                    }
+                }
+                if isOverridden {
+                    Divider()
+                    Button("Follow schedule") {
+                        setCustodyOverride(nil, for: selectedDate)
+                    }
+                }
+            } label: {
+                Text(isOverridden ? "Overridden" : "Change")
+                    .font(.system(size: 12, weight: .semibold, design: .default))
+                    .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 10)
+                    .background(Capsule().fill(FactTrailTheme.aiAccent(for: colorScheme).opacity(0.12)))
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.bottom, 12)
     }
 
     private var monthTitle: String {
@@ -5565,6 +5650,31 @@ private struct CalendarTimelineView: View {
         }
     }
 
+    private func custodyCaregiver(on date: Date) -> CustodyCaregiver? {
+        custodySchedule?.caregiver(on: date)
+    }
+
+    private func custodyColor(on date: Date) -> Color? {
+        guard let caregiver = custodyCaregiver(on: date) else { return nil }
+        return CustodyPalette.color(caregiver.colorIndex)
+    }
+
+    private func isCustodyExchange(_ date: Date) -> Bool {
+        custodySchedule?.isExchange(on: date) ?? false
+    }
+
+    private func setCustodyOverride(_ caregiverID: String?, for date: Date) {
+        guard var schedule = custodySchedule else { return }
+        let key = CustodySchedule.dateKey(for: date)
+        if let caregiverID {
+            schedule.overrides[key] = caregiverID
+        } else {
+            schedule.overrides.removeValue(forKey: key)
+        }
+        custodySchedule = schedule
+        CustodyScheduleStore.save(schedule)
+    }
+
     private func calendarLegend(_ title: String, color: Color, stroked: Bool = false) -> some View {
         HStack(spacing: 5) {
             RoundedRectangle(cornerRadius: 4)
@@ -5586,6 +5696,7 @@ private struct CalendarDayCell: View {
     let isSelected: Bool
     let items: [TimelineItem]
     let isExchangeDay: Bool
+    var custodyColor: Color? = nil
     let onSelect: () -> Void
     @Environment(\.colorScheme) private var colorScheme
 
@@ -5634,6 +5745,9 @@ private struct CalendarDayCell: View {
     private var dayBackground: Color {
         guard Calendar.current.isDate(date, equalTo: visibleMonth, toGranularity: .month) else {
             return .clear
+        }
+        if let custodyColor {
+            return custodyColor.opacity(colorScheme == .dark ? 0.38 : 0.24)
         }
         return FactTrailTheme.border(for: colorScheme).opacity(colorScheme == .dark ? 0.16 : 0.34)
     }

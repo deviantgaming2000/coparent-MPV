@@ -130,10 +130,10 @@ struct SettingsView: View {
                     fullDivider
 
                     menuSection {
-                        SettingsRow(systemImage: "calendar", label: "Custody schedule", destination: ComingSoonView(
-                            systemImage: "calendar",
-                            title: "Custody schedule",
-                            message: "Set your parenting-time schedule and Coparo will color-code your calendar automatically — your days and your co-parent's days. Coming soon."
+                        SettingsRow(systemImage: "calendar", label: "Custody schedule", destination: CustodyScheduleView(
+                            userName: userName,
+                            onSave: { CustodyScheduleStore.save($0) },
+                            onTurnOff: { CustodyScheduleStore.clear() }
                         ))
                         SettingsRow(systemImage: "shield", label: "Mode", trailing: .badge(mode.badge), destination: ModeView())
                         SettingsRow(systemImage: "bell", label: "Notifications", destination: ComingSoonView(
