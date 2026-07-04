@@ -127,9 +127,6 @@ struct ContentView: View {
                         onAddLinkedNote: { item, note in
                             addLinkedNote(note, to: item)
                         },
-                        onAttachImageData: { data, itemID, itemTitle, category in
-                            attachImageData(data, toTimelineID: itemID, itemTitle: itemTitle, defaultCategory: category)
-                        },
                         onDeleteAttachment: { document in
                             deleteDocument(document)
                         },
@@ -513,43 +510,6 @@ struct ContentView: View {
         return makeTimelineInputs(from: items)
     }
 
-    private func attachImageData(_ data: Data, toTimelineID id: String, itemTitle: String, defaultCategory: DocumentCategory) {
-        do {
-            let baseName = "attachment-\(Int(Date().timeIntervalSince1970))"
-            let relativePath = try documentStore.importData(data, suggestedName: baseName, fileExtension: "jpg")
-            let fileName = URL(fileURLWithPath: relativePath).lastPathComponent
-            let document = StoredDocument(
-                title: itemTitle.isEmpty ? "Attachment" : "Attachment for \(itemTitle)",
-                fileName: fileName,
-                fileType: .image,
-                category: defaultCategory,
-                notes: nil,
-                linkedTimelineItemIds: [id],
-                localFilePath: relativePath,
-                thumbnailData: makeAttachmentThumbnail(from: data)
-            )
-            addDocument(document)
-        } catch {
-            saveErrorMessage = "Attachment could not be saved."
-        }
-    }
-
-    private func makeAttachmentThumbnail(from data: Data) -> Data? {
-        guard let uiImage = UIImage(data: data) else { return nil }
-        let maxDim: CGFloat = 220
-        let aspect = uiImage.size.width / max(uiImage.size.height, 1)
-        let targetSize: CGSize
-        if aspect >= 1 {
-            targetSize = CGSize(width: maxDim, height: maxDim / aspect)
-        } else {
-            targetSize = CGSize(width: maxDim * aspect, height: maxDim)
-        }
-        let renderer = UIGraphicsImageRenderer(size: targetSize)
-        let scaled = renderer.image { _ in
-            uiImage.draw(in: CGRect(origin: .zero, size: targetSize))
-        }
-        return scaled.jpegData(compressionQuality: 0.7)
-    }
 
     private func startIncidentFromCheckIn(_ checkIn: CheckIn) {
         var draft = IncidentDraft()
@@ -3346,7 +3306,6 @@ private struct TimelineView: View {
     let saveErrorMessage: String?
     let onEdit: (Incident) -> Void
     let onAddLinkedNote: (TimelineItem, String) -> Void
-    let onAttachImageData: (Data, String, String, DocumentCategory) -> Void
     let onDeleteAttachment: (StoredDocument) -> Void
     var onInsights: () -> Void = {}
     @Environment(\.dismiss) private var dismiss
@@ -3360,12 +3319,6 @@ private struct TimelineView: View {
     @State private var itemForMoreInfo: TimelineItem?
     @State private var itemForNote: TimelineItem?
     @State private var noteDraft = ""
-    @State private var attachmentTargetItemID: String?
-    @State private var attachmentTargetItemTitle: String = ""
-    @State private var attachmentTargetCategory: DocumentCategory = .screenshot
-    @State private var isShowingAttachmentPhotoPicker = false
-    @State private var isShowingAttachmentCamera = false
-    @State private var attachmentPhotoSelections: [PhotosPickerItem] = []
     @State private var previewAttachment: StoredDocument?
     @State private var actionMenuItem: TimelineItem?
 
@@ -3408,8 +3361,6 @@ private struct TimelineView: View {
                                     attachmentsFor: attachments(for:),
                                     onEdit: onEdit,
                                     onAddNote: beginAddNote,
-                                    onChooseFromPhotos: beginChooseFromPhotos,
-                                    onTakePhoto: takePhotoHandler,
                                     onSeeRelated: showRelatedEntries,
                                     onMoreInfo: { itemForMoreInfo = $0 },
                                     onAttachmentTapped: { previewAttachment = $0 },
@@ -3424,8 +3375,6 @@ private struct TimelineView: View {
                                     attachmentsFor: attachments(for:),
                                     onEdit: onEdit,
                                     onAddNote: beginAddNote,
-                                    onChooseFromPhotos: beginChooseFromPhotos,
-                                    onTakePhoto: takePhotoHandler,
                                     onSeeRelated: showRelatedEntries,
                                     onMoreInfo: { itemForMoreInfo = $0 },
                                     onAttachmentTapped: { previewAttachment = $0 },
@@ -3480,10 +3429,6 @@ private struct TimelineView: View {
                 notes: notes(for: item),
                 attachments: attachments(for: item),
                 onEdit: onEdit,
-                onChooseFromPhotos: {
-                    beginChooseFromPhotos(for: item)
-                },
-                onTakePhoto: cameraIsAvailable ? { beginTakePhoto(for: item) } : nil,
                 onAttachmentTapped: { document in
                     previewAttachment = document
                 }
@@ -3516,28 +3461,11 @@ private struct TimelineView: View {
                 }
             )
         }
-        .photosPicker(isPresented: $isShowingAttachmentPhotoPicker, selection: $attachmentPhotoSelections, maxSelectionCount: 8, matching: .images)
-        .onChange(of: attachmentPhotoSelections) { _, items in
-            handleAttachmentPhotoSelections(items)
-        }
-        .fullScreenCover(isPresented: $isShowingAttachmentCamera) {
-            CameraPickerView(
-                onCapture: { data in
-                    isShowingAttachmentCamera = false
-                    saveAttachmentData(data)
-                },
-                onCancel: {
-                    isShowingAttachmentCamera = false
-                }
-            )
-            .ignoresSafeArea()
-        }
         .overlay {
             if let item = actionMenuItem {
                 TimelineActionMenu(
                     item: item,
                     canQuickEdit: item.editableIncident != nil,
-                    canAddPhoto: true,
                     onDismiss: dismissActionMenu,
                     onQuickEdit: {
                         if let incident = item.editableIncident {
@@ -3545,7 +3473,6 @@ private struct TimelineView: View {
                         }
                     },
                     onAddNote: { beginAddNote(item) },
-                    onAddPhoto: { beginChooseFromPhotos(for: item) },
                     onSeeRelated: { showRelatedEntries(for: item) },
                     onMoreInfo: { itemForMoreInfo = item }
                 )
@@ -3558,30 +3485,6 @@ private struct TimelineView: View {
         attachmentsProvider(item.id)
     }
 
-    private var cameraIsAvailable: Bool {
-        UIImagePickerController.isSourceTypeAvailable(.camera)
-    }
-
-    private var takePhotoHandler: ((TimelineItem) -> Void)? {
-        guard cameraIsAvailable else { return nil }
-        return beginTakePhoto
-    }
-
-    private func beginChooseFromPhotos(for item: TimelineItem) {
-        setAttachmentTarget(for: item, category: .screenshot)
-        isShowingAttachmentPhotoPicker = true
-    }
-
-    private func beginTakePhoto(for item: TimelineItem) {
-        setAttachmentTarget(for: item, category: .exchange)
-        isShowingAttachmentCamera = true
-    }
-
-    private func setAttachmentTarget(for item: TimelineItem, category: DocumentCategory) {
-        attachmentTargetItemID = item.id
-        attachmentTargetItemTitle = item.title
-        attachmentTargetCategory = category
-    }
 
     private func presentActionMenu(for item: TimelineItem) {
         withAnimation(.easeOut(duration: 0.18)) {
@@ -3595,29 +3498,6 @@ private struct TimelineView: View {
         }
     }
 
-    private func handleAttachmentPhotoSelections(_ items: [PhotosPickerItem]) {
-        guard !items.isEmpty else { return }
-        let currentSelections = items
-        attachmentPhotoSelections = []
-        Task {
-            for item in currentSelections {
-                do {
-                    if let data = try await item.loadTransferable(type: Data.self) {
-                        await MainActor.run {
-                            saveAttachmentData(data)
-                        }
-                    }
-                } catch {
-                    // Silently ignore individual failures; error state surfaces via saveErrorMessage if the write fails.
-                }
-            }
-        }
-    }
-
-    private func saveAttachmentData(_ data: Data) {
-        guard let itemID = attachmentTargetItemID else { return }
-        onAttachImageData(data, itemID, attachmentTargetItemTitle, attachmentTargetCategory)
-    }
 
     private var timelineHeader: some View {
         HStack {
@@ -3896,8 +3776,6 @@ private struct BranchTimelineView: View {
     let attachmentsFor: (TimelineItem) -> [StoredDocument]
     let onEdit: (Incident) -> Void
     let onAddNote: (TimelineItem) -> Void
-    let onChooseFromPhotos: (TimelineItem) -> Void
-    let onTakePhoto: ((TimelineItem) -> Void)?
     let onSeeRelated: (TimelineItem) -> Void
     let onMoreInfo: (TimelineItem) -> Void
     let onAttachmentTapped: (StoredDocument) -> Void
@@ -3936,8 +3814,6 @@ private struct BranchTimelineView: View {
                         onToggle: { toggle(item) },
                         onEdit: onEdit,
                         onAddNote: onAddNote,
-                        onChooseFromPhotos: onChooseFromPhotos,
-                        onTakePhoto: onTakePhoto,
                         onSeeRelated: onSeeRelated,
                         onMoreInfo: onMoreInfo,
                         onAttachmentTapped: onAttachmentTapped,
@@ -4092,8 +3968,6 @@ private struct BranchTimelineRow: View {
     let onToggle: () -> Void
     let onEdit: (Incident) -> Void
     let onAddNote: (TimelineItem) -> Void
-    let onChooseFromPhotos: (TimelineItem) -> Void
-    let onTakePhoto: ((TimelineItem) -> Void)?
     let onSeeRelated: (TimelineItem) -> Void
     let onMoreInfo: (TimelineItem) -> Void
     let onAttachmentTapped: (StoredDocument) -> Void
@@ -4164,8 +4038,6 @@ private struct BranchTimelineRow: View {
             onToggle: onToggle,
             onEdit: onEdit,
             onAddNote: onAddNote,
-            onChooseFromPhotos: onChooseFromPhotos,
-            onTakePhoto: onTakePhoto,
             onSeeRelated: onSeeRelated,
             onMoreInfo: onMoreInfo,
             onAttachmentTapped: onAttachmentTapped
@@ -4186,8 +4058,6 @@ private struct ListTimelineView: View {
     let attachmentsFor: (TimelineItem) -> [StoredDocument]
     let onEdit: (Incident) -> Void
     let onAddNote: (TimelineItem) -> Void
-    let onChooseFromPhotos: (TimelineItem) -> Void
-    let onTakePhoto: ((TimelineItem) -> Void)?
     let onSeeRelated: (TimelineItem) -> Void
     let onMoreInfo: (TimelineItem) -> Void
     let onAttachmentTapped: (StoredDocument) -> Void
@@ -4209,8 +4079,6 @@ private struct ListTimelineView: View {
                             onToggle: { toggle(item) },
                             onEdit: onEdit,
                             onAddNote: onAddNote,
-                            onChooseFromPhotos: onChooseFromPhotos,
-                            onTakePhoto: onTakePhoto,
                             onSeeRelated: onSeeRelated,
                             onMoreInfo: onMoreInfo,
                             onAttachmentTapped: onAttachmentTapped
@@ -4242,8 +4110,6 @@ private struct TimelineItemCard: View {
     let onToggle: () -> Void
     let onEdit: (Incident) -> Void
     let onAddNote: (TimelineItem) -> Void
-    let onChooseFromPhotos: (TimelineItem) -> Void
-    let onTakePhoto: ((TimelineItem) -> Void)?
     let onSeeRelated: (TimelineItem) -> Void
     let onMoreInfo: (TimelineItem) -> Void
     let onAttachmentTapped: (StoredDocument) -> Void
@@ -4303,8 +4169,6 @@ private struct TimelineItemCard: View {
                         attachments: attachments,
                         onEdit: onEdit,
                         onAddNote: onAddNote,
-                        onChooseFromPhotos: onChooseFromPhotos,
-                        onTakePhoto: onTakePhoto,
                         onSeeRelated: onSeeRelated,
                         onMoreInfo: onMoreInfo,
                         onAttachmentTapped: onAttachmentTapped
@@ -4360,8 +4224,6 @@ private struct TimelineExpandedDetails: View {
     let attachments: [StoredDocument]
     let onEdit: (Incident) -> Void
     let onAddNote: (TimelineItem) -> Void
-    let onChooseFromPhotos: (TimelineItem) -> Void
-    let onTakePhoto: ((TimelineItem) -> Void)?
     let onSeeRelated: (TimelineItem) -> Void
     let onMoreInfo: (TimelineItem) -> Void
     let onAttachmentTapped: (StoredDocument) -> Void
@@ -4383,8 +4245,6 @@ private struct TimelineExpandedDetails: View {
 
             TimelineAttachmentsSection(
                 attachments: attachments,
-                onChooseFromPhotos: { onChooseFromPhotos(item) },
-                onTakePhoto: onTakePhoto.map { handler in { handler(item) } },
                 onAttachmentTapped: onAttachmentTapped
             )
 
@@ -4551,8 +4411,6 @@ private struct TimelineMoreInfoSheet: View {
     let notes: [LinkedNote]
     let attachments: [StoredDocument]
     let onEdit: (Incident) -> Void
-    let onChooseFromPhotos: () -> Void
-    let onTakePhoto: (() -> Void)?
     let onAttachmentTapped: (StoredDocument) -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
@@ -4589,8 +4447,6 @@ private struct TimelineMoreInfoSheet: View {
 
                 TimelineAttachmentsSection(
                     attachments: attachments,
-                    onChooseFromPhotos: onChooseFromPhotos,
-                    onTakePhoto: onTakePhoto,
                     onAttachmentTapped: onAttachmentTapped
                 )
 
@@ -5946,8 +5802,6 @@ private struct TimelineNotesInlineSection: View {
 
 private struct TimelineAttachmentsSection: View {
     let attachments: [StoredDocument]
-    let onChooseFromPhotos: () -> Void
-    let onTakePhoto: (() -> Void)?
     let onAttachmentTapped: (StoredDocument) -> Void
     @Environment(\.colorScheme) private var colorScheme
 
@@ -6051,11 +5905,9 @@ private struct TimelineAttachmentThumbnailTile: View {
 private struct TimelineActionMenu: View {
     let item: TimelineItem
     let canQuickEdit: Bool
-    let canAddPhoto: Bool
     let onDismiss: () -> Void
     let onQuickEdit: () -> Void
     let onAddNote: () -> Void
-    let onAddPhoto: () -> Void
     let onSeeRelated: () -> Void
     let onMoreInfo: () -> Void
 
@@ -6082,13 +5934,6 @@ private struct TimelineActionMenu: View {
                     onDismiss()
                 }
 
-                if canAddPhoto {
-                    divider
-                    row(icon: "paperclip", label: "Add photo") {
-                        onAddPhoto()
-                        onDismiss()
-                    }
-                }
 
                 divider
                 row(icon: "point.3.connected.trianglepath.dotted", label: "See related entries") {
