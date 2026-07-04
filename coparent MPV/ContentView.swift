@@ -137,6 +137,8 @@ struct ContentView: View {
                     )
                 case .insights:
                     InsightsScreenView(
+                        entries: timelineEntryInputs,
+                        aiService: aiService,
                         onHome: { path = [] },
                         onTimeline: { path = [.timeline] }
                     )
@@ -493,6 +495,39 @@ struct ContentView: View {
         storedDocuments
             .filter { $0.linkedTimelineItemIds.contains(id) }
             .sorted { $0.importedAt > $1.importedAt }
+    }
+
+    /// Normalized view of every logged entry, fed to the AI/heuristic insights engine.
+    private var timelineEntryInputs: [TimelineEntryInput] {
+        let incidentsByExchangeID = Dictionary(
+            uniqueKeysWithValues: incidents.compactMap { incident -> (UUID, Incident)? in
+                guard let exchangeRecordID = incident.exchangeRecordID else { return nil }
+                return (exchangeRecordID, incident)
+            }
+        )
+        let items: [TimelineItem] =
+            incidents.filter { $0.exchangeRecordID == nil }.map(TimelineItem.incident)
+            + exchangeRecords.map { TimelineItem.exchangeRecord($0, incidentsByExchangeID[$0.id]) }
+            + checkIns.map(TimelineItem.checkIn)
+
+        return items.map { item in
+            let kind: EntryKind
+            switch item {
+            case .incident: kind = item.isFlagged ? .flag : .entry
+            case .exchangeRecord: kind = .exchange
+            case .checkIn: kind = .checkin
+            }
+            return TimelineEntryInput(
+                id: item.id,
+                date: item.date,
+                kind: kind,
+                title: item.title,
+                text: item.summary,
+                tags: item.tags.map(\.displayName),
+                flagged: item.isFlagged,
+                location: item.locationText
+            )
+        }
     }
 
     private func attachImageData(_ data: Data, toTimelineID id: String, itemTitle: String, defaultCategory: DocumentCategory) {
@@ -3995,22 +4030,6 @@ private enum BranchRow {
     case annotation(TimelineAnnotation)
 }
 
-/// An AI-generated pattern marker rendered between entries on the branch spine
-/// (prototype: the amber "Pattern of service refusals begins here" flag).
-/// Populated by the AI analysis pass; empty until that is wired up.
-struct TimelineAnnotation: Identifiable, Hashable {
-    let id: UUID
-    let text: String
-    /// Chronological position — the annotation renders after entries dated before this.
-    let anchorDate: Date
-
-    init(id: UUID = UUID(), text: String, anchorDate: Date) {
-        self.id = id
-        self.text = text
-        self.anchorDate = anchorDate
-    }
-}
-
 private struct TimelineAnnotationRow: View {
     let annotation: TimelineAnnotation
     let cardColumnWidth: CGFloat
@@ -5023,131 +5042,43 @@ private extension TimelineItem {
     }
 }
 
-// MARK: - Insights
-
-private enum InsightsDemoMode {
-    case withPatterns, empty
-}
-
-private enum InsightType {
-    case concern, affirm
-}
-
-private enum InsightVisual {
-    case strip(dates: [String], color: Color)
-    case tally(values: [Int], labels: [String], color: Color)
-    case none
-}
-
-private struct InsightSupport: Identifiable {
-    let id = UUID()
-    let color: Color
-    let text: String
-    let date: String
-}
-
-/// A detected pattern shown on the Insights screen. In the shipped product these
-/// are produced by the AI analysis pass over the timeline; `sampleInsights` below
-/// is placeholder/preview data used until that pass is wired up.
-private struct Insight: Identifiable {
-    let id = UUID()
-    let type: InsightType
-    let visual: InsightVisual
-    let iconSystemName: String
-    let eyebrow: String
-    let headline: String
-    let body: String
-    let tag: String
-    let firstSeen: String
-    let lastSeen: String
-    let occurrences: Int
-    let supporting: [InsightSupport]
-}
-
-private let sampleInsights: [Insight] = [
-    Insight(
-        type: .concern,
-        visual: .strip(dates: ["May 21", "Jun 4", "Jun 18", "Jun 25"], color: Color(hex: 0xD97706)),
-        iconSystemName: "clock",
-        eyebrow: "Timing pattern",
-        headline: "Drop-offs have been consistently late",
-        body: "Over the past six weeks, drop-offs have run 15–25 minutes behind the scheduled time in 4 of 5 exchanges — a shift from the on-time pattern in the months before.",
-        tag: "late_arrival",
-        firstSeen: "May 21", lastSeen: "Jun 25", occurrences: 4,
-        supporting: [
-            InsightSupport(color: Color(hex: 0x2F5D8C), text: "Late drop-off at school", date: "Jun 18"),
-            InsightSupport(color: Color(hex: 0x4F8F8B), text: "Check-in — school pickup", date: "Jun 25"),
-            InsightSupport(color: Color(hex: 0x2F5D8C), text: "Late arrival, no notice", date: "May 21")
-        ]
-    ),
-    Insight(
-        type: .concern,
-        visual: .tally(values: [1, 0, 1, 2, 1, 3], labels: ["Feb", "Mar", "Apr", "May", "Jun", "Jul"], color: Color(hex: 0x2F5D8C)),
-        iconSystemName: "doc.text",
-        eyebrow: "Compliance pattern",
-        headline: "Service authorizations have gone unsigned",
-        body: "Three service authorizations — speech therapy, the June PCSP, and a follow-up form — have been declined or left unsigned in the past two months, more than in the prior year combined.",
-        tag: "authorization_refused",
-        firstSeen: "May 7", lastSeen: "Jul 2", occurrences: 3,
-        supporting: [
-            InsightSupport(color: Color(hex: 0x2F5D8C), text: "Speech therapy authorization refused", date: "May 7"),
-            InsightSupport(color: Color(hex: 0x059669), text: "PCSP unsigned — screenshot saved", date: "Jun 12")
-        ]
-    ),
-    Insight(
-        type: .affirm,
-        visual: .none,
-        iconSystemName: "heart",
-        eyebrow: "Your consistency",
-        headline: "You've handled every appointment this month",
-        body: "You've independently scheduled and attended all of your child's medical and therapy appointments this month, and logged three additional check-in calls to coordinate care.",
-        tag: "mediation_related",
-        firstSeen: "Jun 3", lastSeen: "Jul 2", occurrences: 5,
-        supporting: [
-            InsightSupport(color: Color(hex: 0x4F8F8B), text: "EDCM — Conciliation Services", date: "Jun 3"),
-            InsightSupport(color: Color(hex: 0x4F8F8B), text: "Check-in — doctor/therapy", date: "Jun 20")
-        ]
-    )
-]
+// MARK: - Insights (view layer)
 
 private func insightAccent(_ type: InsightType, _ colorScheme: ColorScheme) -> Color {
     type == .concern ? Color(hex: 0xD97706) : FactTrailTheme.aiAccent(for: colorScheme)
 }
 
+private extension EntryKind {
+    var displayColor: Color {
+        switch self {
+        case .entry: return Color(hex: 0x2F5D8C)
+        case .checkin: return Color(hex: 0x4F8F8B)
+        case .exchange: return Color(hex: 0x7B6FAB)
+        case .document: return Color(hex: 0x059669)
+        case .flag: return Color(hex: 0xD97706)
+        }
+    }
+}
+
 private struct InsightsScreenView: View {
+    let entries: [TimelineEntryInput]
+    let aiService: any AIService
     let onHome: () -> Void
     let onTimeline: () -> Void
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
 
-    @State private var demoMode: InsightsDemoMode = .withPatterns
+    @State private var insights: [Insight] = []
+    @State private var loaded = false
     @State private var index = 0
     @State private var dragOffset: CGFloat = 0
     @State private var expandedHistoryID: UUID?
 
-    private let insights = sampleInsights
-
     var body: some View {
         VStack(spacing: 0) {
             header
-            demoToggle
-
-            if demoMode == .empty {
-                emptyState
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        introBlock
-                        cardStack
-                        navDots
-                        historySection
-                        Color.clear.frame(height: 12)
-                    }
-                }
-                .scrollIndicators(.hidden)
-            }
-
+            content
             HomeBottomNavigation(
                 activeTab: .insights,
                 onHome: { dismiss() },
@@ -5158,6 +5089,35 @@ private struct InsightsScreenView: View {
         .factTrailScreenBackground()
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .navigationBar)
+        .task {
+            guard !loaded else { return }
+            let result = try? await aiService.analyzeTimeline(entries: entries)
+            insights = result?.insights ?? []
+            index = 0
+            loaded = true
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if !loaded {
+            Spacer()
+            ProgressView().tint(FactTrailTheme.aiAccent(for: colorScheme))
+            Spacer()
+        } else if insights.isEmpty {
+            emptyState
+        } else {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    introBlock
+                    cardStack
+                    navDots
+                    historySection
+                    Color.clear.frame(height: 12)
+                }
+            }
+            .scrollIndicators(.hidden)
+        }
     }
 
     private var header: some View {
@@ -5181,42 +5141,6 @@ private struct InsightsScreenView: View {
         .padding(.bottom, 8)
     }
 
-    private var demoToggle: some View {
-        HStack(spacing: 6) {
-            demoButton("With patterns", mode: .withPatterns)
-            demoButton("Not enough data", mode: .empty)
-            Spacer()
-        }
-        .padding(.horizontal, 20)
-        .padding(.bottom, 8)
-    }
-
-    private func demoButton(_ title: String, mode: InsightsDemoMode) -> some View {
-        let active = demoMode == mode
-        return Button {
-            withAnimation(.easeOut(duration: 0.2)) {
-                demoMode = mode
-                index = 0
-                dragOffset = 0
-            }
-        } label: {
-            Text(title)
-                .font(.system(size: 10.5, weight: .medium, design: .default))
-                .foregroundStyle(active ? FactTrailTheme.aiAccent(for: colorScheme) : FactTrailTheme.mutedText(for: colorScheme))
-                .padding(.vertical, 5)
-                .padding(.horizontal, 11)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(active ? FactTrailTheme.aiAccent(for: colorScheme).opacity(0.10) : FactTrailTheme.surface(for: colorScheme))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .strokeBorder(active ? FactTrailTheme.aiAccent(for: colorScheme) : FactTrailTheme.border(for: colorScheme), lineWidth: 1)
-                        }
-                )
-        }
-        .buttonStyle(.plain)
-    }
-
     private var introBlock: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
@@ -5234,7 +5158,7 @@ private struct InsightsScreenView: View {
             HStack(spacing: 5) {
                 Image(systemName: "waveform.path.ecg")
                     .font(.system(size: 10, weight: .semibold))
-                Text("\(insights.count) patterns found")
+                Text("\(insights.count) pattern\(insights.count == 1 ? "" : "s") found")
                     .font(.system(size: 11.5, weight: .semibold, design: .default))
             }
             .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
@@ -5353,7 +5277,7 @@ private struct InsightsScreenView: View {
                 .font(.system(size: 16, weight: .bold, design: .default))
                 .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                 .padding(.bottom, 8)
-            Text("We'll let you know when something stands out.")
+            Text("As you log more, we'll surface patterns worth your attention here.")
                 .font(.system(size: 13, weight: .regular, design: .default))
                 .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
                 .multilineTextAlignment(.center)
@@ -5417,7 +5341,7 @@ private struct InsightCardView: View {
                 ForEach(insight.supporting) { s in
                     Button(action: onSupportTap) {
                         HStack(spacing: 8) {
-                            Circle().fill(s.color).frame(width: 7, height: 7)
+                            Circle().fill(s.kind.displayColor).frame(width: 7, height: 7)
                             Text(s.text)
                                 .font(.system(size: 11.5, weight: .medium, design: .default))
                                 .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
@@ -5462,10 +5386,10 @@ private struct InsightCardView: View {
     @ViewBuilder
     private var insightVisual: some View {
         switch insight.visual {
-        case .strip(let dates, let color):
-            InsightStripView(dates: dates, color: color)
-        case .tally(let values, let labels, let color):
-            InsightTallyView(values: values, labels: labels, color: color)
+        case .strip(let dates):
+            InsightStripView(dates: dates, color: accent)
+        case .tally(let values, let labels):
+            InsightTallyView(values: values, labels: labels, color: accent)
         case .none:
             EmptyView()
         }
@@ -5557,13 +5481,7 @@ private struct InsightHistoryRow: View {
     let onView: () -> Void
     @Environment(\.colorScheme) private var colorScheme
 
-    private var dotColor: Color {
-        switch insight.visual {
-        case .strip(_, let color): return color
-        case .tally(_, _, let color): return color
-        case .none: return insightAccent(insight.type, colorScheme)
-        }
-    }
+    private var dotColor: Color { insightAccent(insight.type, colorScheme) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -5629,11 +5547,12 @@ private struct InsightHistoryRow: View {
 
     @ViewBuilder
     private var insightVisual: some View {
+        let accent = insightAccent(insight.type, colorScheme)
         switch insight.visual {
-        case .strip(let dates, let color):
-            InsightStripView(dates: dates, color: color)
-        case .tally(let values, let labels, let color):
-            InsightTallyView(values: values, labels: labels, color: color)
+        case .strip(let dates):
+            InsightStripView(dates: dates, color: accent)
+        case .tally(let values, let labels):
+            InsightTallyView(values: values, labels: labels, color: accent)
         case .none:
             Text("No new entries recently — last one was \(insight.lastSeen).")
                 .font(.system(size: 10.5, weight: .regular, design: .default))

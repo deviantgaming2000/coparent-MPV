@@ -55,6 +55,222 @@ typealias AISuggestion = AIIncidentAnalysis
 protocol AIService {
     func analyzeIncident(draft: IncidentDraft) async throws -> AIIncidentAnalysis
     func generateFinalDocumentation(draft: IncidentDraft, analysis: AIIncidentAnalysis?) async throws -> FinalDocumentationSummary
+    /// Analyze the whole timeline for recurring patterns (Insights + spine annotations).
+    func analyzeTimeline(entries: [TimelineEntryInput]) async throws -> TimelineAnalysis
+}
+
+extension AIService {
+    // Default: local, on-device heuristic engine. The backend service overrides this
+    // with an LLM call once a provider is configured.
+    func analyzeTimeline(entries: [TimelineEntryInput]) async throws -> TimelineAnalysis {
+        TimelineInsightEngine.analyze(entries: entries)
+    }
+}
+
+// MARK: - Timeline insights domain (Color-free; the UI layer maps type/kind -> color)
+
+enum InsightType: Equatable {
+    case concern, affirm
+}
+
+/// Semantic entry category — the UI maps this to the timeline color palette.
+enum EntryKind: String, Equatable {
+    case entry, checkin, exchange, document, flag
+}
+
+enum InsightVisual: Equatable {
+    case strip(dates: [String])
+    case tally(values: [Int], labels: [String])
+    case none
+}
+
+struct InsightSupport: Identifiable, Equatable {
+    let id = UUID()
+    let text: String
+    let date: String
+    let kind: EntryKind
+}
+
+struct Insight: Identifiable, Equatable {
+    let id = UUID()
+    let type: InsightType
+    let visual: InsightVisual
+    let iconSystemName: String
+    let eyebrow: String
+    let headline: String
+    let body: String
+    let tag: String
+    let firstSeen: String
+    let lastSeen: String
+    let occurrences: Int
+    let supporting: [InsightSupport]
+}
+
+/// An AI-generated pattern marker rendered between entries on the branch spine
+/// (the amber "Pattern of ... begins here" flag).
+struct TimelineAnnotation: Identifiable, Hashable {
+    let id: UUID
+    let text: String
+    /// Chronological position — the annotation renders after entries dated before this.
+    let anchorDate: Date
+
+    init(id: UUID = UUID(), text: String, anchorDate: Date) {
+        self.id = id
+        self.text = text
+        self.anchorDate = anchorDate
+    }
+}
+
+/// Neutral representation of one timeline entry, decoupled from the UI's TimelineItem.
+struct TimelineEntryInput {
+    let id: String
+    let date: Date
+    let kind: EntryKind
+    let title: String
+    let text: String
+    let tags: [String]
+    let flagged: Bool
+    let location: String
+}
+
+struct TimelineAnalysis {
+    let insights: [Insight]
+    let annotations: [TimelineAnnotation]
+}
+
+/// On-device heuristic pattern detection. Produces genuinely data-driven insights
+/// from the user's real entries — recurring tags, flagged clusters, and check-in
+/// consistency. Intentionally conservative: returns nothing when there isn't a real
+/// pattern, so the screen honestly shows the empty state until enough is logged.
+enum TimelineInsightEngine {
+    static func analyze(entries: [TimelineEntryInput]) -> TimelineAnalysis {
+        guard entries.count >= 2 else {
+            return TimelineAnalysis(insights: [], annotations: [])
+        }
+
+        let sorted = entries.sorted { $0.date < $1.date }
+        let shortDate = DateFormatter()
+        shortDate.dateFormat = "MMM d"
+
+        var insights: [Insight] = []
+        var annotations: [TimelineAnnotation] = []
+
+        // 1) Recurring tags (>= 3 occurrences of the same tag).
+        var tagBuckets: [String: [TimelineEntryInput]] = [:]
+        for entry in sorted {
+            for tag in entry.tags where !tag.trimmingCharacters(in: .whitespaces).isEmpty {
+                tagBuckets[tag, default: []].append(entry)
+            }
+        }
+        for (tag, group) in tagBuckets.sorted(by: { $0.value.count > $1.value.count }) where group.count >= 3 {
+            let first = group.first!.date
+            let last = group.last!.date
+            insights.append(
+                Insight(
+                    type: .concern,
+                    visual: .tally(values: monthlyCounts(group, endingAt: last, months: 6),
+                                   labels: monthLabels(endingAt: last, count: 6)),
+                    iconSystemName: "chart.bar",
+                    eyebrow: "Recurring pattern",
+                    headline: "\(tag) keeps coming up",
+                    body: "\"\(tag)\" appears across \(group.count) entries between \(shortDate.string(from: first)) and \(shortDate.string(from: last)).",
+                    tag: tag,
+                    firstSeen: shortDate.string(from: first),
+                    lastSeen: shortDate.string(from: last),
+                    occurrences: group.count,
+                    supporting: group.suffix(3).reversed().map {
+                        InsightSupport(text: $0.title, date: shortDate.string(from: $0.date), kind: $0.kind)
+                    }
+                )
+            )
+            annotations.append(
+                TimelineAnnotation(text: "Pattern of \(tag.lowercased()) begins here", anchorDate: first)
+            )
+        }
+
+        // 2) Flagged clustering (>= 2 flagged entries).
+        let flagged = sorted.filter { $0.flagged }
+        if flagged.count >= 2 {
+            insights.append(
+                Insight(
+                    type: .concern,
+                    visual: .strip(dates: flagged.suffix(4).map { shortDate.string(from: $0.date) }),
+                    iconSystemName: "flag",
+                    eyebrow: "Flagged entries",
+                    headline: "Flagged incidents are adding up",
+                    body: "\(flagged.count) entries have been flagged for attention, from \(shortDate.string(from: flagged.first!.date)) to \(shortDate.string(from: flagged.last!.date)).",
+                    tag: "flagged",
+                    firstSeen: shortDate.string(from: flagged.first!.date),
+                    lastSeen: shortDate.string(from: flagged.last!.date),
+                    occurrences: flagged.count,
+                    supporting: flagged.suffix(3).reversed().map {
+                        InsightSupport(text: $0.title, date: shortDate.string(from: $0.date), kind: .flag)
+                    }
+                )
+            )
+        }
+
+        // 3) Check-in consistency this month (affirming, >= 3).
+        let calendar = Calendar.current
+        let checkIns = sorted.filter { $0.kind == .checkin }
+        let now = Date()
+        let thisMonth = checkIns.filter { calendar.isDate($0.date, equalTo: now, toGranularity: .month) }
+        if thisMonth.count >= 3 {
+            insights.append(
+                Insight(
+                    type: .affirm,
+                    visual: .none,
+                    iconSystemName: "checkmark.seal",
+                    eyebrow: "Your consistency",
+                    headline: "You've logged \(thisMonth.count) check-ins this month",
+                    body: "You've consistently recorded your handoffs and appointments this month, keeping a clear, contemporaneous record.",
+                    tag: "checkin_consistency",
+                    firstSeen: shortDate.string(from: thisMonth.first!.date),
+                    lastSeen: shortDate.string(from: thisMonth.last!.date),
+                    occurrences: thisMonth.count,
+                    supporting: thisMonth.suffix(3).reversed().map {
+                        InsightSupport(text: $0.title, date: shortDate.string(from: $0.date), kind: .checkin)
+                    }
+                )
+            )
+        }
+
+        // Concern-first, capped.
+        insights.sort { ($0.type == .concern ? 0 : 1) < ($1.type == .concern ? 0 : 1) }
+        return TimelineAnalysis(insights: Array(insights.prefix(6)), annotations: annotations)
+    }
+
+    private static func startOfMonth(_ date: Date, _ calendar: Calendar) -> Date {
+        calendar.date(from: calendar.dateComponents([.year, .month], from: date)) ?? date
+    }
+
+    private static func monthLabels(endingAt end: Date, count: Int) -> [String] {
+        let calendar = Calendar.current
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM"
+        var labels: [String] = []
+        for offset in stride(from: count - 1, through: 0, by: -1) {
+            if let date = calendar.date(byAdding: .month, value: -offset, to: end) {
+                labels.append(formatter.string(from: date))
+            }
+        }
+        return labels
+    }
+
+    private static func monthlyCounts(_ entries: [TimelineEntryInput], endingAt end: Date, months: Int) -> [Int] {
+        let calendar = Calendar.current
+        let endMonth = startOfMonth(end, calendar)
+        var counts = Array(repeating: 0, count: months)
+        for entry in entries {
+            let entryMonth = startOfMonth(entry.date, calendar)
+            let diff = calendar.dateComponents([.month], from: entryMonth, to: endMonth).month ?? -1
+            let index = months - 1 - diff
+            if index >= 0 && index < months {
+                counts[index] += 1
+            }
+        }
+        return counts
+    }
 }
 
 private struct InternalIncidentAnalysis {
