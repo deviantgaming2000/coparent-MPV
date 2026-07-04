@@ -1912,6 +1912,7 @@ private struct IncidentEntryView: View {
         .background(FactTrailTheme.background(for: colorScheme).ignoresSafeArea())
         .navigationTitle(mode == .create ? "New entry" : "Edit entry")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
         .onAppear {
             if mode == .create {
                 incidentLocationManager.captureLocation()
@@ -1924,9 +1925,19 @@ private struct IncidentEntryView: View {
             draft.originalNotes = mergedNotes(base: voiceBaseNotes, transcript: newTranscript)
         }
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button(mode == .create ? "Back" : "Cancel") {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button {
                     dismiss()
+                } label: {
+                    if mode == .create {
+                        HStack(spacing: 3) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 17, weight: .semibold))
+                            Text("Back")
+                        }
+                    } else {
+                        Text("Cancel")
+                    }
                 }
             }
         }
