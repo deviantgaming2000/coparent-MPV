@@ -5170,6 +5170,12 @@ private struct TimelineAddNoteSheet: View {
     let onCancel: () -> Void
     let onSave: () -> Void
     @Environment(\.colorScheme) private var colorScheme
+    @State private var speechTranscriber = SpeechTranscriber()
+    @State private var voiceBaseNote = ""
+
+    private var micColor: Color {
+        speechTranscriber.isRecording ? .red : FactTrailTheme.aiAccent(for: colorScheme)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -5183,20 +5189,49 @@ private struct TimelineAddNoteSheet: View {
                     .lineLimit(2)
             }
 
-            TextEditor(text: $noteText)
-                .font(.system(size: 15, weight: .regular, design: .default))
-                .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
-                .frame(minHeight: 140)
-                .padding(10)
-                .scrollContentBackground(.hidden)
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(FactTrailTheme.surface(for: colorScheme))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1)
-                )
+            ZStack(alignment: .bottomTrailing) {
+                TextEditor(text: $noteText)
+                    .font(.system(size: 15, weight: .regular, design: .default))
+                    .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                    .frame(minHeight: 140)
+                    .padding(.horizontal, 10)
+                    .padding(.top, 10)
+                    .padding(.bottom, 46)
+                    .scrollContentBackground(.hidden)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(FactTrailTheme.surface(for: colorScheme))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1)
+                    )
+
+                HStack(spacing: 8) {
+                    if speechTranscriber.isRecording {
+                        Text("Listening…")
+                            .font(.system(size: 12, weight: .medium, design: .default))
+                            .foregroundStyle(.red)
+                    }
+
+                    Button {
+                        toggleDictation()
+                    } label: {
+                        Image("codoc-microphone")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 17, height: 17)
+                            .foregroundStyle(micColor)
+                            .frame(width: 38, height: 38)
+                            .background(micColor.opacity(0.12), in: Circle())
+                    }
+                    .buttonStyle(HomePressButtonStyle())
+                    .accessibilityLabel(speechTranscriber.isRecording ? "Stop dictation" : "Start dictation")
+                }
+                .padding(.trailing, 10)
+                .padding(.bottom, 8)
+            }
 
             Button {
                 onSave()
@@ -5216,6 +5251,35 @@ private struct TimelineAddNoteSheet: View {
         }
         .padding(20)
         .factTrailScreenBackground()
+        .onChange(of: speechTranscriber.transcript) { _, newTranscript in
+            noteText = mergedNotes(base: voiceBaseNote, transcript: newTranscript)
+        }
+        .onDisappear {
+            speechTranscriber.stopTranscribing()
+        }
+    }
+
+    private func toggleDictation() {
+        if speechTranscriber.isRecording {
+            speechTranscriber.stopTranscribing()
+        } else {
+            voiceBaseNote = noteText
+            Task {
+                await speechTranscriber.startTranscribing()
+            }
+        }
+    }
+
+    /// Appends dictated speech after whatever the user has already typed, matching the
+    /// entry screen's behavior.
+    private func mergedNotes(base: String, transcript: String) -> String {
+        let cleanedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedTranscript.isEmpty else { return base }
+
+        let cleanedBase = base.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedBase.isEmpty else { return cleanedTranscript }
+
+        return "\(cleanedBase)\n\n\(cleanedTranscript)"
     }
 }
 
