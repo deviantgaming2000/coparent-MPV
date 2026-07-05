@@ -266,7 +266,7 @@ struct ContentView: View {
         }
         .task {
             guard isShowingLaunchScreen else { return }
-            try? await Task.sleep(for: .seconds(1.45))
+            try? await Task.sleep(for: .seconds(1.9))
             withAnimation(.easeInOut(duration: 0.45)) {
                 isShowingLaunchScreen = false
             }
@@ -807,102 +807,133 @@ private struct ShareSheet: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
 
+/// The launch screen. Light and on-theme by default (follows the app's
+/// appearance): a soft cream field with two slowly drifting accent blooms, and
+/// an animated logo - the gradient mark springs in, a soft halo breathes behind
+/// it, and a single sheen sweeps across it once as the wordmark settles.
 private struct FactTrailSplashView: View {
-    @State private var isAnimating = false
+    @Environment(\.colorScheme) private var colorScheme
+
+    @State private var markIn = false
+    @State private var textIn = false
+    @State private var breathe = false
+    @State private var sheenX: CGFloat = -1
+    @State private var drift = false
+
+    private var primary: Color { FactTrailTheme.primaryAction(for: colorScheme) }
+    private var accent: Color { FactTrailTheme.aiAccent(for: colorScheme) }
 
     var body: some View {
         ZStack {
-            animatedBackground
+            background
 
-            VStack(spacing: 18) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 32, style: .continuous)
-                        .fill(.ultraThinMaterial.opacity(0.58))
-                        .frame(width: 118, height: 118)
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 32, style: .continuous)
-                                .strokeBorder(
-                                    LinearGradient(
-                                        colors: [.white.opacity(0.62), FactTrailTheme.primaryAction(for: .dark).opacity(0.48), .white.opacity(0.12)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    ),
-                                    lineWidth: 1.2
-                                )
-                        }
-                        .shadow(color: FactTrailTheme.primaryAction(for: .dark).opacity(0.32), radius: 34, x: -12, y: 18)
-                        .shadow(color: FactTrailTheme.aiAccent(for: .dark).opacity(0.28), radius: 34, x: 12, y: -12)
+            VStack(spacing: 22) {
+                logoMark
+                    .scaleEffect(markIn ? 1 : 0.82)
+                    .opacity(markIn ? 1 : 0)
 
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    FactTrailTheme.primaryAction(for: .dark),
-                                    FactTrailTheme.aiAccent(for: .dark),
-                                    FactTrailTheme.primaryAction(for: .dark).opacity(0.72)
-                                ],
-                                startPoint: isAnimating ? .bottomLeading : .topLeading,
-                                endPoint: isAnimating ? .topTrailing : .bottomTrailing
-                            )
-                        )
-                        .frame(width: 76, height: 76)
-                        .overlay {
-                            Text("C")
-                                .font(.system(size: 38, weight: .black, design: .default))
-                                .foregroundStyle(.white)
-                        }
-                        .scaleEffect(isAnimating ? 1.05 : 0.96)
-                }
-
-                VStack(spacing: 6) {
+                VStack(spacing: 7) {
                     Text("Coparo")
-                        .font(.system(size: 38, weight: .bold, design: .default))
-                        .foregroundStyle(.white)
-
+                        .font(.system(size: 34, weight: .bold, design: .rounded))
+                        .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                     Text("A clear record, quietly kept.")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.white.opacity(0.62))
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
                 }
+                .opacity(textIn ? 1 : 0)
+                .offset(y: textIn ? 0 : 10)
             }
-            .padding(34)
-            .background {
-                RoundedRectangle(cornerRadius: 36, style: .continuous)
-                    .fill(.ultraThinMaterial.opacity(0.28))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 36, style: .continuous)
-                            .strokeBorder(.white.opacity(0.14), lineWidth: 1)
-                    }
-            }
-            .padding(28)
         }
         .ignoresSafeArea()
-        .preferredColorScheme(.dark)
-        .onAppear {
-            withAnimation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true)) {
-                isAnimating = true
-            }
+        .onAppear(perform: runAnimation)
+    }
+
+    private var logoMark: some View {
+        ZStack {
+            Circle()
+                .fill(accent.opacity(0.30))
+                .frame(width: 150, height: 150)
+                .blur(radius: 40)
+                .scaleEffect(breathe ? 1.08 : 0.92)
+                .opacity(markIn ? 1 : 0)
+
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [primary, accent],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 104, height: 104)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [.white.opacity(0.30), .clear],
+                                startPoint: .top,
+                                endPoint: .center
+                            )
+                        )
+                }
+                .overlay {
+                    Text("C")
+                        .font(.system(size: 54, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                }
+                .overlay { sheen }
+                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .shadow(color: primary.opacity(0.32), radius: 22, x: 0, y: 14)
+                .scaleEffect(breathe ? 1.015 : 1.0)
         }
     }
 
-    private var animatedBackground: some View {
-        ZStack {
+    private var sheen: some View {
+        GeometryReader { geo in
             LinearGradient(
-                colors: FactTrailTheme.backgroundColors(for: .dark),
-                startPoint: isAnimating ? .topTrailing : .topLeading,
-                endPoint: isAnimating ? .bottomLeading : .bottomTrailing
+                colors: [.clear, .white.opacity(0.55), .clear],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
             )
+            .frame(width: geo.size.width * 0.6)
+            .rotationEffect(.degrees(18))
+            .offset(x: sheenX * geo.size.width * 1.6)
+        }
+    }
+
+    private var background: some View {
+        ZStack {
+            FactTrailTheme.background(for: colorScheme)
 
             Circle()
-                .fill(FactTrailTheme.primaryAction(for: .dark).opacity(0.24))
-                .frame(width: 280, height: 280)
-                .blur(radius: 54)
-                .offset(x: isAnimating ? 140 : -120, y: isAnimating ? -220 : -120)
+                .fill(primary.opacity(colorScheme == .dark ? 0.22 : 0.12))
+                .frame(width: 300, height: 300)
+                .blur(radius: 70)
+                .offset(x: drift ? -110 : -150, y: drift ? -180 : -230)
 
             Circle()
-                .fill(FactTrailTheme.aiAccent(for: .dark).opacity(0.22))
-                .frame(width: 320, height: 320)
-                .blur(radius: 62)
-                .offset(x: isAnimating ? -160 : 150, y: isAnimating ? 230 : 170)
+                .fill(accent.opacity(colorScheme == .dark ? 0.20 : 0.12))
+                .frame(width: 340, height: 340)
+                .blur(radius: 80)
+                .offset(x: drift ? 150 : 120, y: drift ? 210 : 250)
+        }
+    }
+
+    private func runAnimation() {
+        withAnimation(.easeInOut(duration: 6).repeatForever(autoreverses: true)) {
+            drift = true
+        }
+        withAnimation(.spring(response: 0.65, dampingFraction: 0.72)) {
+            markIn = true
+        }
+        withAnimation(.easeInOut(duration: 2.6).repeatForever(autoreverses: true).delay(0.3)) {
+            breathe = true
+        }
+        withAnimation(.easeOut(duration: 0.55).delay(0.3)) {
+            textIn = true
+        }
+        withAnimation(.easeInOut(duration: 0.8).delay(0.45)) {
+            sheenX = 1
         }
     }
 }
