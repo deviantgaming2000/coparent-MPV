@@ -459,14 +459,47 @@ struct OnboardingWelcome: View {
 
 struct OnboardingCustodyStep: View {
     let onContinue: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("factTrailUserName") private var userName = ""
+    @State private var showingSetup = false
+
     var body: some View {
         OBScaffold {
             OBProgressRow(step: 2)
             OBSkipRow(action: onContinue)
             OBIconRing(system: "calendar")
-            Text("Add your custody schedule?").font(.system(size: 22, weight: .bold))
+            Text("Add your custody schedule?")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                .padding(.bottom, 10)
+            Text("This helps us color-code your calendar automatically. You can always add or change it later.")
+                .font(.system(size: 14))
+                .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 24)
+
+            VStack(spacing: 10) {
+                OBChoiceRow(icon: "checkmark", title: "Yes, let's add it", subtitle: "Choose a pattern and start date on the next screen.") {
+                    showingSetup = true
+                }
+                OBChoiceRow(icon: "info.circle", title: "Not right now", subtitle: "You can set this up anytime from settings.") {
+                    onContinue()
+                }
+            }
         } bottom: {
-            OBPrimaryButton(title: "Continue", action: onContinue)
+            EmptyView()
+        }
+        .sheet(isPresented: $showingSetup) {
+            NavigationStack {
+                CustodyScheduleView(
+                    userName: userName,
+                    onSave: { schedule in
+                        CustodyScheduleStore.save(schedule)
+                    },
+                    onTurnOff: { CustodyScheduleStore.clear() }
+                )
+            }
+            .onDisappear { onContinue() }
         }
     }
 }
