@@ -471,13 +471,7 @@ struct OnboardingCustodyStep: View {
         }
         .sheet(isPresented: $showingSetup) {
             NavigationStack {
-                CustodyScheduleView(
-                    userName: userName,
-                    onSave: { schedule in
-                        CustodyScheduleStore.save(schedule)
-                    },
-                    onTurnOff: { CustodyScheduleStore.clear() }
-                )
+                CustodyDescribeView(userName: userName)
             }
             .onDisappear { onContinue() }
         }

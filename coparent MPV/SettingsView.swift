@@ -137,11 +137,7 @@ struct SettingsView: View {
                     fullDivider
 
                     menuSection {
-                        SettingsRow(systemImage: "calendar", label: "Custody schedule", destination: CustodyScheduleView(
-                            userName: userName,
-                            onSave: { CustodyScheduleStore.save($0) },
-                            onTurnOff: { CustodyScheduleStore.clear() }
-                        ))
+                        SettingsRow(systemImage: "calendar", label: "Custody schedule", destination: CustodyDescribeView(userName: userName))
                         SettingsRow(systemImage: "shield", label: "Mode", trailing: .badge(mode.badge), destination: ModeView())
                         SettingsRow(systemImage: "bell", label: "Notifications", destination: ComingSoonView(
                             systemImage: "bell",
