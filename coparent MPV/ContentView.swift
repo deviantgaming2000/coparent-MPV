@@ -4,6 +4,7 @@ import UIKit
 import UniformTypeIdentifiers
 
 struct ContentView: View {
+    @Environment(AccountManager.self) private var account
     @AppStorage("hasAcceptedFactTrailDisclaimer") private var hasAcceptedDisclaimer = false
     @AppStorage("factTrailAppearance") private var appearanceRawValue = FactTrailAppearance.dark.rawValue
     @AppStorage("factTrailUserName") private var userName = ""
@@ -695,6 +696,12 @@ struct ContentView: View {
         path = []
         userName = ""
         hasAcceptedDisclaimer = false
+
+        // Account and first-run state so a reset returns to a true fresh install.
+        AccountStore.clear()
+        UserDefaults.standard.removeObject(forKey: "coparoHasCompletedOnboarding")
+        UserDefaults.standard.removeObject(forKey: "coparoHideSignInPrompt")
+        account.signOut()
     }
 
     // MARK: - Backup & restore
