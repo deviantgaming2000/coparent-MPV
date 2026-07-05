@@ -52,7 +52,9 @@ enum CustodyScheduleMapper {
         var labelToID: [String: String] = [:]
         let youCaregiver = existingCaregivers.first { $0.id == CustodyCaregiver.youID }
             ?? CustodyCaregiver(id: CustodyCaregiver.youID, name: "You", colorIndex: 0)
-        var usedColorIndexes = Set<Int>()
+        // Seed from every existing caregiver's color up front so a newly-created AI
+        // caregiver never reuses a color already assigned to someone in the app.
+        var usedColorIndexes = Set(existingCaregivers.map { $0.colorIndex })
 
         func nextColorIndex() -> Int {
             var i = 0
@@ -178,8 +180,28 @@ enum HolidayResolver {
 /// A keyword fallback for common patterns, used when on-device AI is unavailable.
 /// Returns nil when it does not recognize the phrasing (the caller falls back to manual).
 enum HeuristicCustodyDescriptionParser {
+    /// Nuance keywords that mean the description is richer than a bare canonical
+    /// phrase (it names a holiday, a birthday, a vacation, etc.). When any of these
+    /// appear, the heuristic must not claim the description - a canonical-only draft
+    /// would silently drop that detail - so it defers to the on-device model instead.
+    private static let nuanceKeywords = [
+        "christmas", "thanksgiving", "new year", "birthday", "holiday",
+        "halloween", "easter", "vacation", "summer", "break", "july", "fourth", "4th"
+    ]
+
+    /// Self-guard: this parser only claims SIMPLE, canonical-only descriptions.
+    /// It requires the description to be 8 words or fewer AND free of any nuance
+    /// keyword (names, holidays, vacations, etc.) before it will match a canonical
+    /// phrase. Anything richer returns nil so the caller defers to the model, which
+    /// preserves names/holidays the heuristic's fixed "me"/"co-parent" draft would drop.
     static func parse(_ description: String) -> CustodyDraft? {
-        let text = description.lowercased()
+        let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = trimmed.lowercased()
+
+        let wordCount = trimmed.split(whereSeparator: { $0.isWhitespace }).count
+        guard wordCount <= 8 else { return nil }
+        guard !nuanceKeywords.contains(where: { text.contains($0) }) else { return nil }
+
         let me = CustodyDraftCaregiver(label: "me", role: .you)
         let coParent = CustodyDraftCaregiver(label: "co-parent", role: .coParent)
 

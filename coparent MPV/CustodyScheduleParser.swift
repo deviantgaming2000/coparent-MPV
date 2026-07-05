@@ -63,6 +63,7 @@ struct OnDeviceCustodyParser: CustodyScheduleParsing {
         Assign each day of the repeating cycle to exactly one caregiver.
         Days are ordered starting on Sunday (index 0 = Sunday).
         Use the role 'you' for the person describing the schedule (words like me, I, my).
+        "Week on, week off" (and "alternating weeks") means one caregiver has all seven days of the first week and the other caregiver has all seven days of the next week - it does NOT mean the caregivers alternate individual days.
         Only include holidays the user explicitly names. Do not invent dates or people.
         """))
 
@@ -76,10 +77,22 @@ struct OnDeviceCustodyParser: CustodyScheduleParsing {
         CustodyDraft(
             cycleLengthDays: gen.cycleLengthDays,
             days: gen.days.map { CustodyDraftDay(dayIndex: $0.dayIndex, caregiverLabel: $0.caregiverLabel) },
-            caregivers: gen.caregivers.map { CustodyDraftCaregiver(label: $0.label, role: CustodyRole(rawValue: $0.role) ?? .other) },
+            caregivers: gen.caregivers.map { CustodyDraftCaregiver(label: $0.label, role: role(from: $0.role)) },
             startHint: gen.startHint,
             holidays: gen.holidays.map { CustodyDraftHoliday(name: $0.name, caregiverLabel: $0.caregiverLabel) }
         )
+    }
+
+    /// Normalizes the model's free-form role string (e.g. "co-parent", "Co Parent")
+    /// before mapping it to `CustodyRole`, since `CustodyRole(rawValue:)` alone only
+    /// matches the exact raw value "coParent".
+    private static func role(from raw: String) -> CustodyRole {
+        let normalized = raw.lowercased().filter { $0.isLetter }
+        switch normalized {
+        case "you", "me", "myself", "i": return .you
+        case "coparent", "coparents", "parent": return .coParent
+        default: return .other
+        }
     }
 }
 
@@ -92,6 +105,19 @@ struct HeuristicCustodyParser: CustodyScheduleParsing {
     }
 }
 
+// MARK: - Composed parser
+
+/// Tries the deterministic heuristic first (for simple, canonical phrases it
+/// recognizes) and falls through to the on-device model for everything else.
+struct HeuristicThenOnDeviceParser: CustodyScheduleParsing {
+    func parse(description: String, existingCaregivers: [CustodyCaregiver], referenceDate: Date) async throws -> CustodyParseResult? {
+        if let draft = HeuristicCustodyDescriptionParser.parse(description) {
+            return CustodyScheduleMapper.map(draft: draft, existingCaregivers: existingCaregivers, referenceDate: referenceDate)
+        }
+        return try await OnDeviceCustodyParser().parse(description: description, existingCaregivers: existingCaregivers, referenceDate: referenceDate)
+    }
+}
+
 // MARK: - Factory
 
 enum CustodyScheduleParserFactory {
@@ -101,6 +127,6 @@ enum CustodyScheduleParserFactory {
     }
 
     static func make() -> any CustodyScheduleParsing {
-        isOnDeviceAvailable ? OnDeviceCustodyParser() : HeuristicCustodyParser()
+        isOnDeviceAvailable ? HeuristicThenOnDeviceParser() : HeuristicCustodyParser()
     }
 }
