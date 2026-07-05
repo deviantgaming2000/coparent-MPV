@@ -506,12 +506,43 @@ struct OnboardingCustodyStep: View {
 
 struct OnboardingModeStep: View {
     let onContinue: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("coparoMode") private var modeRaw = CoparoMode.casual.rawValue
+
     var body: some View {
         OBScaffold {
             OBProgressRow(step: 3)
             OBSkipRow(action: onContinue)
             OBIconRing(system: "shield")
-            Text("How should we prepare your records?").font(.system(size: 22, weight: .bold))
+            Text("How should we prepare your records?")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                .padding(.bottom, 10)
+            Text("This controls what happens quietly in the background. You can change it anytime from settings.")
+                .font(.system(size: 14))
+                .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 24)
+
+            VStack(spacing: 10) {
+                OBChoiceRow(
+                    icon: "heart",
+                    title: "Just keeping a record",
+                    subtitle: "Log things as they happen, just in case you need them later.",
+                    selected: modeRaw == CoparoMode.casual.rawValue
+                ) {
+                    modeRaw = CoparoMode.casual.rawValue
+                }
+                OBChoiceRow(
+                    icon: "building.columns",
+                    title: "I want my records court-ready",
+                    subtitle: "We'll generate neutral, lawyer-ready summaries of your entries in the background.",
+                    selected: modeRaw == CoparoMode.court.rawValue
+                ) {
+                    modeRaw = CoparoMode.court.rawValue
+                }
+            }
+            .padding(.bottom, 16)
         } bottom: {
             OBPrimaryButton(title: "Continue", action: onContinue)
         }
