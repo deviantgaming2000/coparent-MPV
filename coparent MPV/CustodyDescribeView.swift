@@ -149,7 +149,18 @@ struct CustodyDescribeView: View {
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                     Spacer()
-                    DatePicker("", selection: $anchorDate, displayedComponents: .date).labelsHidden()
+                    DatePicker("", selection: $anchorDate, displayedComponents: .date)
+                        .labelsHidden()
+                        .onChange(of: anchorDate) { _, newValue in
+                            // Snap to the start of the picked week so the repeating
+                            // cycle always begins on a week boundary, matching the label.
+                            var calendar = Calendar(identifier: .gregorian)
+                            calendar.firstWeekday = 1
+                            if let weekStart = calendar.dateInterval(of: .weekOfYear, for: newValue)?.start,
+                               weekStart != anchorDate {
+                                anchorDate = weekStart
+                            }
+                        }
                 }
                 .padding(14)
                 .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(FactTrailTheme.surface(for: colorScheme)))
@@ -195,7 +206,7 @@ struct CustodyDescribeView: View {
 
     private func loadExisting() {
         if let existing = CustodyScheduleStore.load() {
-            result = CustodyParseResult(schedule: existing, summary: "Your current schedule.", holidayNotes: [])
+            result = CustodyParseResult(schedule: existing, summary: CustodyScheduleMapper.summary(for: existing), holidayNotes: [])
             anchorDate = existing.anchorDate
             stage = .preview
         }

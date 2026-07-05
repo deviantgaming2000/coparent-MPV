@@ -119,11 +119,12 @@ enum CustodyScheduleMapper {
             patternID: CustodyPattern.custom.rawValue
         )
 
-        return CustodyParseResult(schedule: schedule, summary: summarize(schedule: schedule, calendar: calendar), holidayNotes: holidayNotes)
+        return CustodyParseResult(schedule: schedule, summary: summary(for: schedule), holidayNotes: holidayNotes)
     }
 
-    /// A plain-English summary of the first week's assignments.
-    private static func summarize(schedule: CustodySchedule, calendar: Calendar) -> String {
+    /// A plain-English summary of the first week's assignments. Public so a saved
+    /// schedule can be re-summarized when its preview is reopened.
+    static func summary(for schedule: CustodySchedule) -> String {
         guard !schedule.cycle.isEmpty else { return "No days assigned yet." }
         let names = Dictionary(uniqueKeysWithValues: schedule.caregivers.map { ($0.id, $0.id == CustodyCaregiver.youID ? "You" : $0.name) })
         let weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
