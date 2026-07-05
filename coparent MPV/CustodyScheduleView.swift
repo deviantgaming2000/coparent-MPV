@@ -21,6 +21,9 @@ struct CustodyScheduleView: View {
     let userName: String
     let onSave: (CustodySchedule) -> Void
     let onTurnOff: () -> Void
+    /// When set, the editor starts from this schedule instead of the saved one
+    /// (used to hand an AI-produced schedule to the manual editor for tweaking).
+    var initialSchedule: CustodySchedule? = nil
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
@@ -292,7 +295,7 @@ struct CustodyScheduleView: View {
 
     private func loadState() {
         caregivers = Self.buildCaregivers(youName: youName)
-        let existing = CustodyScheduleStore.load()
+        let existing = initialSchedule ?? CustodyScheduleStore.load()
         hasExisting = existing != nil
 
         if let existing {
