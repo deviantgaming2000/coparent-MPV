@@ -551,17 +551,104 @@ struct OnboardingModeStep: View {
 
 struct OnboardingPeopleStep: View {
     let onContinue: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// One editable draft row. `roleOther` holds the free-text when role is `.other`.
+    struct DraftPerson: Identifiable {
+        let id = UUID()
+        var name: String = ""
+        var role: PersonRole = .coParent
+        var roleOther: String = ""
+    }
+
+    @State private var drafts: [DraftPerson] = [DraftPerson()]
+
     var body: some View {
         OBScaffold {
             OBProgressRow(step: 4)
             OBSkipRow(action: onContinue)
             OBIconRing(system: "person.2")
-            Text("Add people you'll reference").font(.system(size: 22, weight: .bold))
+            Text("Add people you'll reference")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                .padding(.bottom, 10)
+            Text("Save your co-parent or kids now so you can reference them quickly later - no full contact info needed, just names.")
+                .font(.system(size: 14))
+                .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 20)
+
+            ForEach($drafts) { $draft in
+                VStack(spacing: 6) {
+                    HStack(spacing: 8) {
+                        TextField("Name", text: $draft.name)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 14))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 12)
+                            .background(FactTrailTheme.surface(for: colorScheme))
+                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1.5))
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                        Picker("Role", selection: $draft.role) {
+                            ForEach(PersonRole.allCases) { role in
+                                Text(role.rawValue).tag(role)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .tint(FactTrailTheme.secondaryText(for: colorScheme))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 8)
+                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1.5))
+                    }
+                    if draft.role == .other {
+                        TextField("Who are they? (e.g. grandparent, friend)", text: $draft.roleOther)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 13.5))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 11)
+                            .background(FactTrailTheme.surface(for: colorScheme))
+                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1.5))
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                }
+                .padding(.bottom, 10)
+            }
+
+            Button {
+                drafts.append(DraftPerson())
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 13, weight: .bold))
+                    Text("Add another")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+            }
+            .buttonStyle(.plain)
+            .padding(.bottom, 8)
         } bottom: {
-            OBPrimaryButton(title: "Continue", action: onContinue)
+            OBPrimaryButton(title: "Continue") {
+                savePeople()
+                onContinue()
+            }
         }
     }
+
+    private func savePeople() {
+        let people: [SavedPerson] = drafts.compactMap { draft in
+            let name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { return nil }
+            return SavedPerson(name: name, role: draft.role)
+        }
+        guard !people.isEmpty else { return }
+        var existing = PeopleStore.load()
+        existing.append(contentsOf: people)
+        PeopleStore.save(existing)
+    }
 }
+
 
 // MARK: - Complete
 
