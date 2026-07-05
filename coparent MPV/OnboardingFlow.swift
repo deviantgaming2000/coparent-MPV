@@ -292,116 +292,117 @@ struct OnboardingAccount: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        ZStack(alignment: .top) {
-            FactTrailTheme.background(for: colorScheme).ignoresSafeArea()
-
-            // Header banner
-            LinearGradient(
-                colors: [Color(hex: 0x2F5D8C), Color(hex: 0x4F8F8B)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .frame(height: 220)
-            .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 32, bottomTrailingRadius: 32, style: .continuous))
-            .ignoresSafeArea(edges: .top)
-
-            ScrollView {
-                VStack(spacing: 0) {
-                    VStack(spacing: 6) {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color.white.opacity(0.18))
-                            .frame(width: 52, height: 52)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .stroke(Color.white.opacity(0.28), lineWidth: 1)
-                            )
-                            .overlay(
-                                Image(systemName: "heart")
-                                    .font(.system(size: 22, weight: .regular))
-                                    .foregroundStyle(.white)
-                            )
-                            .padding(.bottom, 16)
-                        Text("Glad you're here.\nLet's get you set up.")
-                            .font(.system(size: 22, weight: .bold))
-                            .multilineTextAlignment(.center)
-                            .foregroundStyle(.white)
-                        Text("Your records stay private and secure.")
-                            .font(.system(size: 13.5))
-                            .foregroundStyle(.white.opacity(0.82))
-                    }
-                    .padding(.top, 44)
-                    .padding(.bottom, 28)
-
-                    // Card
-                    VStack(spacing: 10) {
-                        SignInWithAppleButton(.continue) { request in
-                            request.requestedScopes = [.fullName, .email]
-                        } onCompletion: { result in
-                            handleApple(result)
-                        }
-                        .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
-                        .frame(height: 48)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-
-                        Button {
-                            withAnimation { showGoogleNote = true }
-                        } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: "g.circle")
-                                    .font(.system(size: 17, weight: .medium))
-                                Text("Continue with Google")
-                                    .font(.system(size: 14.5, weight: .semibold))
-                            }
-                            .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 13)
-                            .background(FactTrailTheme.surface(for: colorScheme))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1.5)
-                            )
-                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-
-                        if showGoogleNote {
-                            Text("Google sign-in is coming soon.")
-                                .font(.system(size: 12))
-                                .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
-                                .frame(maxWidth: .infinity, alignment: .center)
-                                .padding(.top, 2)
-                        }
-
-                        if let errorMessage {
-                            Text(errorMessage)
-                                .font(.system(size: 12))
-                                .foregroundStyle(.red)
-                                .frame(maxWidth: .infinity, alignment: .center)
-                                .padding(.top, 2)
-                        }
-
-                        Button("Skip for now", action: onSkip)
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
-                            .buttonStyle(.plain)
-                            .padding(.top, 6)
-
-                        Text("By continuing, you agree to our Terms and Privacy Policy.")
-                            .font(.system(size: 10.5))
-                            .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
-                            .multilineTextAlignment(.center)
-                            .padding(.top, 8)
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 22)
-                    .padding(.bottom, 20)
-                    .background(FactTrailTheme.surface(for: colorScheme))
-                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    .shadow(color: .black.opacity(0.10), radius: 14, y: 8)
-                    .padding(.horizontal, 24)
+        ScrollView {
+            VStack(spacing: 0) {
+                // Header banner - gradient sized to its content, bleeding into the top safe area.
+                VStack(spacing: 6) {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.white.opacity(0.18))
+                        .frame(width: 52, height: 52)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(Color.white.opacity(0.28), lineWidth: 1)
+                        )
+                        .overlay(
+                            Image(systemName: "heart")
+                                .font(.system(size: 22, weight: .regular))
+                                .foregroundStyle(.white)
+                        )
+                        .padding(.bottom, 16)
+                    Text("Glad you're here.\nLet's get you set up.")
+                        .font(.system(size: 22, weight: .bold))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.white)
+                    Text("Your records stay private and secure.")
+                        .font(.system(size: 13.5))
+                        .foregroundStyle(.white.opacity(0.82))
                 }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 24)
+                .padding(.bottom, 52)
+                .background(
+                    UnevenRoundedRectangle(bottomLeadingRadius: 32, bottomTrailingRadius: 32, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color(hex: 0x2F5D8C), Color(hex: 0x4F8F8B)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .ignoresSafeArea(edges: .top)
+                )
+
+                // Card
+                VStack(spacing: 10) {
+                    SignInWithAppleButton(.continue) { request in
+                        request.requestedScopes = [.fullName, .email]
+                    } onCompletion: { result in
+                        handleApple(result)
+                    }
+                    .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+                    .frame(height: 48)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                    Button {
+                        withAnimation { showGoogleNote = true }
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "g.circle")
+                                .font(.system(size: 17, weight: .medium))
+                            Text("Continue with Google")
+                                .font(.system(size: 14.5, weight: .semibold))
+                        }
+                        .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 13)
+                        .background(FactTrailTheme.surface(for: colorScheme))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1.5)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+
+                    if showGoogleNote {
+                        Text("Google sign-in is coming soon.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.top, 2)
+                    }
+
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.red)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.top, 2)
+                    }
+
+                    Button("Skip for now", action: onSkip)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                        .buttonStyle(.plain)
+                        .padding(.top, 6)
+
+                    Text("By continuing, you agree to our Terms and Privacy Policy.")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 8)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 22)
+                .padding(.bottom, 20)
+                .background(FactTrailTheme.surface(for: colorScheme))
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .shadow(color: .black.opacity(0.10), radius: 14, y: 8)
+                .padding(.horizontal, 24)
+                .padding(.top, -24)
             }
         }
+        .background(FactTrailTheme.background(for: colorScheme).ignoresSafeArea())
     }
 
     private func handleApple(_ result: Result<ASAuthorization, Error>) {
