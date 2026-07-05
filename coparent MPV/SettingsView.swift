@@ -91,6 +91,7 @@ struct SettingsView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(AccountManager.self) private var account
     @AppStorage("factTrailUserName") private var userName = ""
     @AppStorage("factTrailAppearance") private var appearanceRaw = FactTrailAppearance.dark.rawValue
     @AppStorage("coparoMode") private var modeRaw = CoparoMode.casual.rawValue
@@ -100,7 +101,17 @@ struct SettingsView: View {
 
     private var displayName: String {
         let trimmed = userName.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "You" : trimmed
+        if !trimmed.isEmpty { return trimmed }
+        if let name = account.session?.displayName, !name.isEmpty { return name }
+        return "You"
+    }
+
+    private var profileSubtitle: String {
+        if let session = account.session {
+            if let email = session.email, !email.isEmpty { return email }
+            return "Signed in with Apple"
+        }
+        return "Stored on this device"
     }
 
     private var initial: String {
@@ -120,11 +131,7 @@ struct SettingsView: View {
 
                     menuSection {
                         SettingsRow(systemImage: "person.2", label: "My people", destination: MyPeopleView())
-                        SettingsRow(systemImage: "person", label: "Account", destination: ComingSoonView(
-                            systemImage: "person.crop.circle",
-                            title: "Account",
-                            message: "You're using Coparo on this device. Signing in with Apple — so your records back up and sync across your devices — is coming soon."
-                        ))
+                        SettingsRow(systemImage: "person", label: "Account", destination: AccountView())
                     }
 
                     fullDivider
@@ -191,7 +198,7 @@ struct SettingsView: View {
                 Text(displayName)
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
-                Text("Stored on this device")
+                Text(profileSubtitle)
                     .font(.system(size: 12, weight: .regular))
                     .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
             }
