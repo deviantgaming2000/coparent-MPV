@@ -113,11 +113,13 @@ struct AccountView: View {
     }
 
     private func initial(for session: AccountSession) -> String {
-        let source = session.displayName?.isEmpty == false ? session.displayName! : (session.email ?? "?")
+        let source = session.displayName.flatMap { $0.isEmpty ? nil : $0 } ?? session.email ?? "?"
         return String(source.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased()
     }
 
     private func handleApple(_ result: Result<ASAuthorization, Error>) {
+        // Clear any stale error from a previous attempt.
+        errorMessage = nil
         switch result {
         case .success(let auth):
             guard let credential = auth.credential as? ASAuthorizationAppleIDCredential else {

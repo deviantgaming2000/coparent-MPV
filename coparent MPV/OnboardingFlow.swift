@@ -376,6 +376,8 @@ struct OnboardingAccount: View {
     }
 
     private func handleApple(_ result: Result<ASAuthorization, Error>) {
+        // Clear any stale error from a previous attempt.
+        errorMessage = nil
         switch result {
         case .success(let auth):
             guard let credential = auth.credential as? ASAuthorizationAppleIDCredential else {
@@ -528,6 +530,8 @@ struct OnboardingPeopleStep: View {
         let id = UUID()
         var name: String = ""
         var role: PersonRole = .coParent
+        // Display-only: shown when role is `.other`, but not persisted, since
+        // SavedPerson stores the role category only (no free-text field).
         var roleOther: String = ""
     }
 
