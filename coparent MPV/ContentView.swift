@@ -4063,11 +4063,6 @@ private struct TimelineView: View {
                             }
                         }
 
-                        if relatedFilterSource == nil && !filteredIncidents.isEmpty {
-                            TimelineFullPDFShareButton(incidents: filteredIncidents)
-                                .padding(.top, 4)
-                        }
-
                         Color.clear.frame(height: 16)
                     }
                     .padding(.horizontal, 20)
@@ -6993,68 +6988,6 @@ private struct TimelinePDFShareButton: View {
         } catch {
             pdfURL = nil
             pdfErrorMessage = "PDF could not be prepared on this device."
-        }
-    }
-}
-
-private struct TimelineFullPDFShareButton: View {
-    let incidents: [Incident]
-    @State private var pdfURL: URL?
-    @State private var pdfErrorMessage: String?
-
-    var body: some View {
-        VStack(spacing: 8) {
-            if let pdfURL {
-                ShareLink(
-                    item: pdfURL,
-                    subject: Text("Coparo Timeline"),
-                    message: Text("Coparo timeline export")
-                ) {
-                    Label("Export Full Timeline PDF", systemImage: "square.and.arrow.up")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-            } else if let pdfErrorMessage {
-                Text(pdfErrorMessage)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-            } else {
-                HStack {
-                    ProgressView()
-                    Text("Preparing timeline PDF...")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .padding(.vertical, 8)
-        .task(id: exportSignature) {
-            preparePDF()
-        }
-    }
-
-    private var exportSignature: String {
-        incidents.map {
-            [
-                $0.id.uuidString,
-                "\($0.incidentDate.timeIntervalSince1970)",
-                $0.category,
-                "\($0.originalNotes.count)",
-                "\($0.neutralSummary.count)",
-                "\($0.guidedAnswers.count)",
-                "\($0.patternTags.count)"
-            ].joined(separator: "-")
-        }.joined(separator: "|")
-    }
-
-    private func preparePDF() {
-        do {
-            pdfURL = try IncidentPDFExporter.makeTimelinePDF(for: incidents)
-            pdfErrorMessage = nil
-        } catch {
-            pdfURL = nil
-            pdfErrorMessage = "Timeline PDF could not be prepared on this device."
         }
     }
 }
