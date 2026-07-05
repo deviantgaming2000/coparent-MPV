@@ -5,7 +5,6 @@ struct AccountView: View {
     @Environment(AccountManager.self) private var account
     @Environment(\.colorScheme) private var colorScheme
     @State private var showingSignOutConfirm = false
-    @State private var showGoogleNote = false
     @State private var errorMessage: String?
 
     var body: some View {
@@ -104,27 +103,6 @@ struct AccountView: View {
             .frame(height: 48)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
-            Button {
-                withAnimation { showGoogleNote = true }
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "g.circle")
-                        .font(.system(size: 17, weight: .medium))
-                    Text("Continue with Google")
-                        .font(.system(size: 14.5, weight: .semibold))
-                }
-                .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 13)
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1.5))
-            }
-            .buttonStyle(.plain)
-
-            if showGoogleNote {
-                Text("Google sign-in is coming soon.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
-            }
             if let errorMessage {
                 Text(errorMessage)
                     .font(.system(size: 12))
