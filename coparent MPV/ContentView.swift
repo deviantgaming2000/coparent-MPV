@@ -1378,6 +1378,7 @@ private struct HomeView: View {
                 .padding(.top, 20)
                 .padding(.bottom, 18)
             }
+            .scrollIndicators(.hidden)
 
             HomeBottomNavigation(activeTab: .home, onTimeline: onViewTimeline, onInsights: onViewInsights)
         }
