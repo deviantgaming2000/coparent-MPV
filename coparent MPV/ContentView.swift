@@ -1254,6 +1254,9 @@ private struct HomeView: View {
     let onOpenExchangeRecord: (ExchangeRecord) -> Void
     var onPickUp: () -> Void = {}
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(AccountManager.self) private var account
+    @AppStorage("coparoHideSignInPrompt") private var hideSignInPrompt = false
+    @State private var showingAccountFromBanner = false
 
     /// Standalone entries that are thin enough to invite strengthening. Drives the
     /// "Pick up where you left off" card's count and visibility.
@@ -1275,6 +1278,7 @@ private struct HomeView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 17) {
                     header
+                    signInBanner
                     greetingBlock
 
                     if let latestItem {
@@ -1341,6 +1345,52 @@ private struct HomeView: View {
         }
         .background(HomePalette.background(for: colorScheme).ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showingAccountFromBanner) {
+            NavigationStack { AccountView() }
+        }
+    }
+
+    @ViewBuilder
+    private var signInBanner: some View {
+        if !account.isSignedIn && !hideSignInPrompt {
+            HStack(spacing: 12) {
+                Image(systemName: "person.crop.circle.badge.plus")
+                    .font(.system(size: 20))
+                    .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Sign in to Coparo")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                    Text("Attach your name to this device with Apple.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
+                }
+                Spacer(minLength: 8)
+                Button {
+                    showingAccountFromBanner = true
+                } label: {
+                    Text("Sign in")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(FactTrailTheme.primaryAction(for: colorScheme))
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                Button {
+                    withAnimation { hideSignInPrompt = true }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(14)
+            .background(FactTrailTheme.aiSoftBackground(for: colorScheme))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
     }
 
     private var header: some View {
