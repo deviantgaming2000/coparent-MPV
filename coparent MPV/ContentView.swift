@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @Environment(AccountManager.self) private var account
     @AppStorage("hasAcceptedFactTrailDisclaimer") private var hasAcceptedDisclaimer = false
-    @AppStorage("factTrailAppearance") private var appearanceRawValue = FactTrailAppearance.dark.rawValue
+    @AppStorage("factTrailAppearance") private var appearanceRawValue = FactTrailAppearance.light.rawValue
     @AppStorage("factTrailUserName") private var userName = ""
     @State private var incidents: [Incident] = []
     @State private var exchangeRecords: [ExchangeRecord] = []
@@ -357,7 +357,7 @@ struct ContentView: View {
     }
 
     private var selectedAppearance: FactTrailAppearance {
-        FactTrailAppearance(rawValue: appearanceRawValue) ?? .dark
+        FactTrailAppearance(rawValue: appearanceRawValue) ?? .light
     }
 
     private var appearanceBinding: Binding<FactTrailAppearance> {
@@ -1211,7 +1211,7 @@ private struct UserNameSetupView: View {
                 .padding()
                 .factTrailGlassCard(cornerRadius: 18)
 
-            Text("This stays on this device for now. Later this can come from your Apple or Google account.")
+            Text("This stays on this device for now. Later this can come from your Apple account.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 

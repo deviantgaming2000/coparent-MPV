@@ -93,11 +93,11 @@ struct SettingsView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(AccountManager.self) private var account
     @AppStorage("factTrailUserName") private var userName = ""
-    @AppStorage("factTrailAppearance") private var appearanceRaw = FactTrailAppearance.dark.rawValue
+    @AppStorage("factTrailAppearance") private var appearanceRaw = FactTrailAppearance.light.rawValue
     @AppStorage("coparoMode") private var modeRaw = CoparoMode.casual.rawValue
 
     private var mode: CoparoMode { CoparoMode(rawValue: modeRaw) ?? .casual }
-    private var appearance: FactTrailAppearance { FactTrailAppearance(rawValue: appearanceRaw) ?? .dark }
+    private var appearance: FactTrailAppearance { FactTrailAppearance(rawValue: appearanceRaw) ?? .light }
 
     private var displayName: String {
         let trimmed = userName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -478,7 +478,7 @@ private struct ModeView: View {
 
 private struct AppearanceView: View {
     @Environment(\.colorScheme) private var colorScheme
-    @AppStorage("factTrailAppearance") private var appearanceRaw = FactTrailAppearance.dark.rawValue
+    @AppStorage("factTrailAppearance") private var appearanceRaw = FactTrailAppearance.light.rawValue
 
     var body: some View {
         ScrollView {

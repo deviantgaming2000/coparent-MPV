@@ -12,8 +12,15 @@ enum OnboardingStep: Int, CaseIterable {
 struct OnboardingContainerView: View {
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage("coparoHasCompletedOnboarding") private var hasCompletedOnboarding = false
+    // Onboarding follows the app's appearance setting, defaulting to light, so
+    // the first-run experience is light regardless of the device's system setting.
+    @AppStorage("factTrailAppearance") private var appearanceRaw = FactTrailAppearance.light.rawValue
 
     @State private var step: OnboardingStep = .splash
+
+    private var appearance: FactTrailAppearance {
+        FactTrailAppearance(rawValue: appearanceRaw) ?? .light
+    }
 
     var body: some View {
         ZStack {
@@ -27,6 +34,7 @@ struct OnboardingContainerView: View {
                 ))
         }
         .animation(.easeInOut(duration: 0.35), value: step)
+        .preferredColorScheme(appearance.colorScheme)
     }
 
     @ViewBuilder
