@@ -77,6 +77,21 @@ struct GuidedQuestionAnswer: Identifiable, Codable, Equatable {
     var answer: String
 }
 
+/// One entry in an incident's tamper-evident change history. Every change to an
+/// entry after it's created is recorded here with the moment it happened, so the
+/// record reads as a contemporaneous, court-reliable trail.
+struct AuditEntry: Identifiable, Codable, Equatable {
+    let id: UUID
+    let timestamp: Date
+    let action: String
+
+    init(id: UUID = UUID(), timestamp: Date = Date(), action: String) {
+        self.id = id
+        self.timestamp = timestamp
+        self.action = action
+    }
+}
+
 struct Incident: Identifiable, Codable, Equatable {
     let id: UUID
     let createdAt: Date
@@ -98,6 +113,16 @@ struct Incident: Identifiable, Codable, Equatable {
     let documentationCompleteness: DocumentationCompleteness?
     let exchangeRecordID: UUID?
     let tags: [EntryTag]
+    let auditLog: [AuditEntry]
+
+    /// The window during which the original text can still be corrected. After this,
+    /// the original description is immutable; only timestamped supplements can be added.
+    static let lockWindow: TimeInterval = 5 * 60
+
+    /// True once the original description is locked (5 minutes after creation).
+    var isOriginalLocked: Bool {
+        Date().timeIntervalSince(createdAt) > Incident.lockWindow
+    }
 
     init(
         id: UUID,
@@ -119,7 +144,8 @@ struct Incident: Identifiable, Codable, Equatable {
         finalDocumentationSummary: String = "",
         documentationCompleteness: DocumentationCompleteness? = nil,
         exchangeRecordID: UUID? = nil,
-        tags: [EntryTag] = []
+        tags: [EntryTag] = [],
+        auditLog: [AuditEntry] = []
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -141,6 +167,7 @@ struct Incident: Identifiable, Codable, Equatable {
         self.documentationCompleteness = documentationCompleteness
         self.exchangeRecordID = exchangeRecordID
         self.tags = tags
+        self.auditLog = auditLog
     }
 
     init(from decoder: Decoder) throws {
@@ -166,6 +193,7 @@ struct Incident: Identifiable, Codable, Equatable {
         documentationCompleteness = try container.decodeIfPresent(DocumentationCompleteness.self, forKey: .documentationCompleteness)
         exchangeRecordID = try container.decodeIfPresent(UUID.self, forKey: .exchangeRecordID)
         tags = try container.decodeIfPresent([EntryTag].self, forKey: .tags) ?? []
+        auditLog = try container.decodeIfPresent([AuditEntry].self, forKey: .auditLog) ?? []
     }
 }
 
@@ -225,7 +253,9 @@ struct IncidentDraft: Equatable {
     var aiAnalysis: AIIncidentAnalysis?
     var finalDocumentation: FinalDocumentationSummary?
     var exchangeRecordID: UUID?
-    var category: IncidentCategory = .exchange
+    // Default to a neutral category. Previously this defaulted to `.exchange`,
+    // which mislabeled every entry as an "Exchange" even with no supporting data.
+    var category: IncidentCategory = .other
 
     var canCreateSummary: Bool {
         !originalNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -258,7 +288,8 @@ struct IncidentSummaryDraft: Equatable {
             finalDocumentationSummary: draft.finalDocumentation?.summary ?? "",
             documentationCompleteness: draft.finalDocumentation?.completeness,
             exchangeRecordID: draft.exchangeRecordID,
-            tags: draft.tags
+            tags: draft.tags,
+            auditLog: [AuditEntry(action: "Entry created")]
         )
     }
 }
@@ -285,7 +316,8 @@ extension Incident {
             finalDocumentationSummary: finalDocumentationSummary,
             documentationCompleteness: documentationCompleteness,
             exchangeRecordID: exchangeRecordID,
-            tags: newTags
+            tags: newTags,
+            auditLog: auditLog
         )
     }
 
@@ -318,14 +350,45 @@ extension Incident {
     }
 
     func updated(from draft: IncidentDraft) -> Incident {
-        let summaryDraft = NeutralSummaryGenerator.makeSummary(from: draft)
+        let locked = isOriginalLocked
+
+        // The original description is immutable after the lock window: keep the stored
+        // text and summary regardless of what the draft carries.
+        var effectiveDraft = draft
+        if locked { effectiveDraft.originalNotes = originalNotes }
+        let summaryDraft = NeutralSummaryGenerator.makeSummary(from: effectiveDraft)
+
+        // Record every change with the moment it happened — never backdated.
+        var newAudit = auditLog
+        let now = Date()
+        func log(_ action: String) { newAudit.append(AuditEntry(timestamp: now, action: action)) }
+
+        if !locked && draft.originalNotes != originalNotes {
+            log("Edited the original description")
+        }
+        if draft.peopleInvolved != peopleInvolved {
+            log(peopleInvolved.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Added who was involved" : "Updated who was involved")
+        }
+        if draft.location != location {
+            log(location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Added a location" : "Updated the location")
+        }
+        if draft.childInvolved != childInvolved {
+            log("Marked child involved: \(draft.childInvolved ? "Yes" : "No")")
+        }
+        if draft.category.rawValue != category {
+            log("Set category to \(draft.category.rawValue)")
+        }
+        let addedAttachments = draft.evidenceAttachments.count - evidenceAttachments.count
+        if addedAttachments > 0 {
+            log("Added \(addedAttachments) attachment\(addedAttachments == 1 ? "" : "s")")
+        }
 
         return Incident(
             id: id,
             createdAt: createdAt,
             incidentDate: draft.incidentDate,
             category: draft.category.rawValue,
-            originalNotes: draft.originalNotes,
+            originalNotes: effectiveDraft.originalNotes,
             neutralSummary: summaryDraft.neutralSummary,
             peopleInvolved: draft.peopleInvolved,
             location: draft.location,
@@ -340,7 +403,8 @@ extension Incident {
             finalDocumentationSummary: draft.finalDocumentation?.summary ?? "",
             documentationCompleteness: draft.finalDocumentation?.completeness,
             exchangeRecordID: draft.exchangeRecordID,
-            tags: draft.tags
+            tags: draft.tags,
+            auditLog: newAudit
         )
     }
 }

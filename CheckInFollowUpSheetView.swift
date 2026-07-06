@@ -12,8 +12,8 @@ struct CheckInFollowUpSheetView: View {
     @State private var noteText = ""
 
     var body: some View {
+        // Uses the system drag indicator; no custom handle (which showed a second bar).
         VStack(alignment: .leading, spacing: 16) {
-            sheetHandle
             header
             contextCard
 
@@ -24,19 +24,10 @@ struct CheckInFollowUpSheetView: View {
             }
         }
         .padding(.horizontal, 24)
-        .padding(.top, 8)
+        .padding(.top, 28)
         .padding(.bottom, 24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(FactTrailTheme.background(for: colorScheme).ignoresSafeArea())
-    }
-
-    private var sheetHandle: some View {
-        Capsule()
-            .fill(FactTrailTheme.border(for: colorScheme))
-            .frame(width: 42, height: 5)
-            .frame(maxWidth: .infinity)
-            .padding(.top, 4)
-            .padding(.bottom, 12)
     }
 
     private var header: some View {

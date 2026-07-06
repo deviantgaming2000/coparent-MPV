@@ -95,7 +95,7 @@ struct CustodyScheduleView: View {
                     Spacer()
                 }
             }
-            Text("Everyone from My people appears here. Add more in the My people menu.")
+            Text("A schedule is just you and your co-parent. Set who your co-parent is in the My people menu.")
                 .font(.system(size: 11))
                 .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
         }
@@ -294,21 +294,25 @@ struct CustodyScheduleView: View {
     }
 
     private func loadState() {
-        caregivers = Self.buildCaregivers(youName: youName)
         let existing = initialSchedule ?? CustodyScheduleStore.load()
         hasExisting = existing != nil
 
+        // A custody schedule is strictly two people: you and one co-parent.
+        let coParent = Self.resolveCoParent(youName: youName, saved: existing?.caregivers ?? [])
+        let you = CustodyCaregiver(id: CustodyCaregiver.youID, name: youName, colorIndex: 0)
+        caregivers = [you, coParent]
+
         if let existing {
             anchorDate = existing.anchorDate
-            overrides = existing.overrides
+            // Collapse every non-you reference in an older, multi-person schedule
+            // down onto the single co-parent, so editing an old schedule can never
+            // show a stale third caregiver.
+            overrides = existing.overrides.mapValues { $0 == CustodyCaregiver.youID ? $0 : coParent.id }
             pattern = CustodyPattern(rawValue: existing.patternID) ?? .custom
             if pattern == .custom {
-                customCycle = existing.cycle.isEmpty ? defaultCustomCycle() : existing.cycle
+                let normalized = existing.cycle.map { $0 == CustodyCaregiver.youID ? $0 : coParent.id }
+                customCycle = normalized.isEmpty ? defaultCustomCycle() : normalized
                 customIsBiweekly = existing.cycle.count > 7
-            }
-            // Keep saved caregivers' colors if present, but refresh names/new people.
-            if !existing.caregivers.isEmpty {
-                caregivers = mergeCaregivers(saved: existing.caregivers, current: caregivers)
             }
         } else {
             customCycle = defaultCustomCycle()
@@ -342,32 +346,17 @@ struct CustodyScheduleView: View {
         return String(date.formatted(.dateTime.weekday(.narrow)))
     }
 
-    private static func buildCaregivers(youName: String) -> [CustodyCaregiver] {
-        var result: [CustodyCaregiver] = [CustodyCaregiver(id: CustodyCaregiver.youID, name: youName, colorIndex: 0)]
-        for (offset, person) in PeopleStore.load().enumerated() {
-            result.append(CustodyCaregiver(id: person.id.uuidString, name: person.name, colorIndex: offset + 1))
+    /// The single co-parent for the schedule: the person marked "Co-parent" in
+    /// My people; failing that, the non-you caregiver already saved on the
+    /// schedule (so an existing setup keeps its name); failing that, a default.
+    private static func resolveCoParent(youName: String, saved: [CustodyCaregiver]) -> CustodyCaregiver {
+        if let coParent = PeopleStore.load().first(where: { $0.role == .coParent }) {
+            return CustodyCaregiver(id: coParent.id.uuidString, name: coParent.name, colorIndex: 1)
         }
-        if result.count < 2 {
-            result.append(CustodyCaregiver(id: "coparent-default", name: "Co-parent", colorIndex: 1))
+        if let savedOther = saved.first(where: { $0.id != CustodyCaregiver.youID }) {
+            return CustodyCaregiver(id: savedOther.id, name: savedOther.name, colorIndex: 1)
         }
-        return result
-    }
-
-    private func mergeCaregivers(saved: [CustodyCaregiver], current: [CustodyCaregiver]) -> [CustodyCaregiver] {
-        var byID = Dictionary(uniqueKeysWithValues: saved.map { ($0.id, $0) })
-        var merged = current.map { caregiver -> CustodyCaregiver in
-            if var savedCaregiver = byID[caregiver.id] {
-                savedCaregiver.name = caregiver.name
-                byID[caregiver.id] = nil
-                return savedCaregiver
-            }
-            return caregiver
-        }
-        // Keep any saved caregivers that are no longer in My people (still referenced by the cycle).
-        for leftover in byID.values where resolvedCycle.contains(leftover.id) || overrides.values.contains(leftover.id) {
-            merged.append(leftover)
-        }
-        return merged
+        return CustodyCaregiver(id: "coparent-default", name: "Co-parent", colorIndex: 1)
     }
 }
 

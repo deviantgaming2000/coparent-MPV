@@ -17,7 +17,7 @@ struct ExchangeRecordEntryView: View {
         Form {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Exchange Record")
+                    Text("Exchange record")
                         .font(.title2.bold())
                     Text("Save a routine exchange quickly. Add more detail only if something noteworthy happened.")
                         .font(.footnote)
@@ -55,7 +55,7 @@ struct ExchangeRecordEntryView: View {
                     Button {
                         locationManager.captureLocation()
                     } label: {
-                        Label("Refresh Location", systemImage: "location.magnifyingglass")
+                        Label("Refresh location", systemImage: "location.magnifyingglass")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(FactTrailGlassButtonStyle())
@@ -114,7 +114,7 @@ struct ExchangeRecordEntryView: View {
             }
         }
         .factTrailFormBackground()
-        .navigationTitle("Exchange Record")
+        .navigationTitle("Exchange record")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             exchangeDate = Date()

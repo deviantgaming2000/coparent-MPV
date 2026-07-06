@@ -296,7 +296,7 @@ struct OnboardingAccount: View {
 
     @Environment(AccountManager.self) private var account
     @Environment(\.colorScheme) private var colorScheme
-    @State private var errorMessage: String?
+    @State private var authMode: EmailAuthMode?
 
     var body: some View {
         ScrollView {
@@ -341,22 +341,20 @@ struct OnboardingAccount: View {
 
                 // Card
                 VStack(spacing: 10) {
-                    SignInWithAppleButton(.continue) { request in
-                        request.requestedScopes = [.fullName, .email]
-                    } onCompletion: { result in
-                        handleApple(result)
+                    Button { authMode = .create } label: {
+                        Text("Create an account")
+                            .frame(maxWidth: .infinity)
                     }
-                    .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
-                    .frame(height: 48)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .buttonStyle(FactTrailPrimaryButtonStyle())
 
-                    if let errorMessage {
-                        Text(errorMessage)
-                            .font(.system(size: 12))
-                            .foregroundStyle(.red)
-                            .frame(maxWidth: .infinity, alignment: .center)
-                            .padding(.top, 2)
+                    Button { authMode = .login } label: {
+                        Text("Already have an account? Log in")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+                            .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(.plain)
+                    .padding(.top, 2)
 
                     Button("Skip for now", action: onSkip)
                         .font(.system(size: 13, weight: .medium))
@@ -381,27 +379,13 @@ struct OnboardingAccount: View {
             }
         }
         .background(FactTrailTheme.background(for: colorScheme).ignoresSafeArea())
-    }
-
-    private func handleApple(_ result: Result<ASAuthorization, Error>) {
-        // Clear any stale error from a previous attempt.
-        errorMessage = nil
-        switch result {
-        case .success(let auth):
-            guard let credential = auth.credential as? ASAuthorizationAppleIDCredential else {
-                errorMessage = "Could not read the Apple credential. Please try again."
-                return
-            }
-            account.applyAppleCredential(
-                userID: credential.user,
-                fullName: credential.fullName,
-                email: credential.email
-            )
-            onSignedIn()
-        case .failure(let error):
-            // A user cancel is silent; anything else surfaces a short message.
-            if (error as? ASAuthorizationError)?.code == .canceled { return }
-            errorMessage = "Sign in with Apple didn't complete. Please try again."
+        .sheet(item: $authMode, onDismiss: {
+            // If the create/login succeeded, advance onboarding.
+            if account.isSignedIn { onSignedIn() }
+        }) { mode in
+            EmailAuthSheet(mode: mode)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
     }
 }
@@ -425,7 +409,7 @@ struct OnboardingWelcome: View {
                 .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                 .padding(.bottom, 10)
-            Text("Just a few questions before we get started - each one takes a few seconds, and you can skip anything you're not ready for.")
+            Text("A few quick questions to set things up. Skip anything you're not ready for.")
                 .font(.system(size: 14))
                 .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
                 .fixedSize(horizontal: false, vertical: true)

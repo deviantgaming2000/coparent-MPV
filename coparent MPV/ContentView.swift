@@ -19,6 +19,8 @@ struct ContentView: View {
     @State private var isShowingReview = false
     @State private var pendingExchangeDraft: IncidentDraft?
     @State private var pendingExchangeRecordID: UUID?
+    @State private var timelineTagFilter: String?
+    @State private var pickUpStates: [String: PickUpItemState] = PickUpStateStore.load()
     @State private var saveErrorMessage: String?
     @State private var shouldShowNamePrompt = false
     @State private var isShowingSettings = false
@@ -85,7 +87,8 @@ struct ContentView: View {
                         onSaveCreatedIncident: { incident in
                             saveIncident(incident)
                             path.removeAll()
-                        }
+                        },
+                        onFinish: { path.removeAll() }
                     )
                 case .entryFromExchange:
                     IncidentEntryView(
@@ -99,6 +102,11 @@ struct ContentView: View {
                             if let pendingExchangeRecordID {
                                 attachIncident(incident.id, toExchangeRecordID: pendingExchangeRecordID)
                             }
+                            pendingExchangeDraft = nil
+                            pendingExchangeRecordID = nil
+                            path.removeAll()
+                        },
+                        onFinish: {
                             pendingExchangeDraft = nil
                             pendingExchangeRecordID = nil
                             path.removeAll()
@@ -116,6 +124,11 @@ struct ContentView: View {
                             if let pendingCheckInIncidentID {
                                 resolveCheckInFollowUp(id: pendingCheckInIncidentID, status: .incidentLogged)
                             }
+                            pendingCheckInIncidentDraft = nil
+                            pendingCheckInIncidentID = nil
+                            path.removeAll()
+                        },
+                        onFinish: {
                             pendingCheckInIncidentDraft = nil
                             pendingCheckInIncidentID = nil
                             path.removeAll()
@@ -140,14 +153,19 @@ struct ContentView: View {
                         onDeleteAttachment: { document in
                             deleteDocument(document)
                         },
-                        onInsights: { path = [.insights] }
+                        onInsights: { path = [.insights] },
+                        initialTagFilter: timelineTagFilter
                     )
                 case .insights:
                     InsightsScreenView(
                         entries: timelineEntryInputs,
                         aiService: aiService,
                         onHome: { path = [] },
-                        onTimeline: { path = [.timeline] }
+                        onTimeline: { timelineTagFilter = nil; path = [.timeline] },
+                        onViewEntries: { tag in
+                            timelineTagFilter = tag
+                            path = [.timeline]
+                        }
                     )
                 case .exchangeRecord:
                     ExchangeRecordEntryView(
@@ -168,6 +186,7 @@ struct ContentView: View {
                             initialDraft: incident.draft,
                             mode: .edit,
                             aiService: aiService,
+                            originalLocked: incident.isOriginalLocked,
                             onCreateSummary: { _ in },
                             onSaveEdit: { draft in
                                 updateIncident(incident.updated(from: draft))
@@ -200,7 +219,8 @@ struct ContentView: View {
                         incidents: incidents.filter { $0.exchangeRecordID == nil && $0.needsMoreDetail },
                         onOpenIncident: { incident in
                             path.append(.edit(incident.id))
-                        }
+                        },
+                        onSaveIncident: { updateIncident($0) }
                     )
                 }
             }
@@ -218,7 +238,7 @@ struct ContentView: View {
             if let activeReviewSummary {
                 SummaryReviewView(
                     summaryDraft: activeReviewSummary,
-                    onSave: {
+                    onClose: {
                         let incident = activeReviewSummary.incident
                         saveIncident(incident)
                         if let pendingExchangeRecordID {
@@ -235,10 +255,7 @@ struct ContentView: View {
                         self.isShowingReview = false
                         path.removeAll()
                     },
-                    onEdit: {
-                        isShowingReview = false
-                    },
-                    onCancel: {
+                    onDelete: {
                         self.activeReviewSummary = nil
                         self.pendingExchangeDraft = nil
                         self.pendingExchangeRecordID = nil
@@ -275,13 +292,14 @@ struct ContentView: View {
         .sheet(isPresented: $shouldShowNamePrompt) {
             UserNameSetupView(userName: $userName)
                 .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $shouldShowCheckInSheet) {
             CheckInSheetView { checkIn in
                 saveCheckIn(checkIn)
             }
             .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.hidden)
+            .presentationDragIndicator(.visible)
         }
         .sheet(item: $pendingCheckInFollowUp) { checkIn in
             CheckInFollowUpSheetView(
@@ -297,7 +315,7 @@ struct ContentView: View {
                 }
             )
             .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.hidden)
+            .presentationDragIndicator(.visible)
         }
         .alert("Reset all data?", isPresented: $shouldShowResetConfirmation) {
             Button("Reset Everything", role: .destructive, action: resetAllData)
@@ -608,6 +626,33 @@ struct ContentView: View {
             + checkIns.map(TimelineItem.checkIn)
 
         return makeTimelineInputs(from: items)
+    }
+
+    /// Thin entries the app suggests strengthening, minus any the user set aside or
+    /// ignored — drives the Insights "Pick up where you left off" card.
+    private var pickUpItems: [PickUpItem] {
+        incidents
+            .filter { $0.exchangeRecordID == nil && $0.needsMoreDetail }
+            .filter { (pickUpStates[$0.id.uuidString] ?? .pending) == .pending }
+            .prefix(5)
+            .map { incident in
+                PickUpItem(
+                    id: incident.id.uuidString,
+                    title: TimelineItem.incident(incident).title,
+                    suggestion: incident.detailSuggestion
+                )
+            }
+    }
+
+    private func setPickUpState(_ state: PickUpItemState, for id: String) {
+        pickUpStates[id] = state
+        PickUpStateStore.save(pickUpStates)
+    }
+
+    private func openIncidentForDetail(id: String) {
+        guard let uuid = UUID(uuidString: id),
+              incidents.contains(where: { $0.id == uuid }) else { return }
+        path.append(.edit(uuid))
     }
 
 
@@ -1044,7 +1089,17 @@ private enum TimelineItem: Identifiable {
     var title: String {
         switch self {
         case .incident(let incident):
-            return incident.category
+            // The entry's title should never be a raw category that reads like a
+            // type ("Exchange", "Other"). Exchange isn't an entry category; if one
+            // slipped through, title it descriptively and let the category map away.
+            switch incident.category {
+            case IncidentCategory.exchange.rawValue:
+                return "Exchange details"
+            case IncidentCategory.other.rawValue, "":
+                return "Entry"
+            default:
+                return incident.category
+            }
         case .exchangeRecord(let record, let attachedIncident):
             if attachedIncident != nil {
                 return "Child exchange"
@@ -1121,6 +1176,26 @@ private enum TimelineItem: Identifiable {
             return attachedIncident != nil
         case .checkIn(let checkIn):
             return !checkIn.followUpCompleted
+        }
+    }
+
+    /// Plain-English explanation of why this entry is flagged, shown when the user
+    /// taps the amber "Flagged" badge.
+    var flagReason: String? {
+        guard isFlagged else { return nil }
+        switch self {
+        case .incident(let incident):
+            let patterns = incident.patternTags
+                .filter { $0 == .safetyConcern }
+                .map(\.displayName)
+            if !patterns.isEmpty {
+                return "Flagged for a safety concern based on what you described."
+            }
+            return "Flagged for attention."
+        case .exchangeRecord:
+            return "Flagged because an incident is linked to this exchange."
+        case .checkIn:
+            return "Flagged because its follow-up hasn't been completed yet."
         }
     }
 
@@ -1397,10 +1472,10 @@ private struct HomeView: View {
                     .font(.system(size: 20))
                     .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Sign in to Coparo")
+                    Text("Set up your account")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
-                    Text("Attach your name to this device with Apple.")
+                    Text("Create a local account for your profile.")
                         .font(.system(size: 12))
                         .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
                 }
@@ -1805,6 +1880,103 @@ private enum HomeActionCardStyle {
 
 // MARK: - Pick up where you left off
 
+/// A lightweight, one-question-at-a-time follow-up. Instead of reopening the whole
+/// edit form, it asks for the single most useful missing detail and saves just that
+/// field — which is timestamped and audited via `Incident.updated(from:)` and never
+/// touches the locked original text.
+private struct PickUpFollowUpSheet: View {
+    let incident: Incident
+    let onSave: (Incident) -> Void
+    let onOpenFullEntry: () -> Void
+
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var value = ""
+
+    private enum Field { case people, location }
+
+    private var field: Field? {
+        if incident.peopleInvolved.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return .people }
+        if incident.location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return .location }
+        return nil
+    }
+
+    private var question: String {
+        switch field {
+        case .people: return "Who was involved?"
+        case .location: return "Where did this happen?"
+        case .none: return "Add a detail"
+        }
+    }
+
+    private var placeholder: String {
+        switch field {
+        case .people: return "e.g. Me, Jordan, the kids"
+        case .location: return "e.g. School pickup, home"
+        case .none: return "Add a note"
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(FactTrailTheme.aiAccent(for: colorScheme))
+                        .frame(width: 6, height: 6)
+                    Text("ONE QUICK THING")
+                        .font(.system(size: 11, weight: .bold, design: .default))
+                        .tracking(2)
+                        .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+                }
+                Text(question)
+                    .font(.system(size: 25, weight: .bold, design: .default))
+                    .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+            }
+
+            TextField(placeholder, text: $value, axis: .vertical)
+                .lineLimit(1...3)
+                .font(.system(size: 16, weight: .regular, design: .default))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(FactTrailTheme.surface(for: colorScheme), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1.5)
+                }
+
+            Button(action: save) {
+                Text("Save")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(FactTrailPrimaryButtonStyle())
+            .disabled(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+            Button("Open the full entry instead", action: onOpenFullEntry)
+                .font(.system(size: 13, weight: .medium, design: .default))
+                .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                .frame(maxWidth: .infinity)
+                .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 22)
+        .padding(.top, 22)
+        .padding(.bottom, 24)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(FactTrailTheme.surface(for: colorScheme).ignoresSafeArea())
+    }
+
+    private func save() {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        var draft = incident.draft
+        switch field {
+        case .people: draft.peopleInvolved = trimmed
+        case .location: draft.location = trimmed
+        case .none: break
+        }
+        onSave(incident.updated(from: draft))
+    }
+}
+
 /// Lists the standalone entries that are still thin, so the user can open each one and
 /// add the missing specifics. The list is passed in already filtered; when the user
 /// strengthens an entry it drops out on the next appearance, and the home card's count
@@ -1812,9 +1984,11 @@ private enum HomeActionCardStyle {
 private struct PickUpView: View {
     let incidents: [Incident]
     let onOpenIncident: (Incident) -> Void
+    var onSaveIncident: (Incident) -> Void = { _ in }
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
+    @State private var followUpIncident: Incident?
 
     private let entryColor = Color(red: 0x2F / 255, green: 0x5D / 255, blue: 0x8C / 255)
 
@@ -1835,7 +2009,7 @@ private struct PickUpView: View {
 
                         ForEach(incidents) { incident in
                             Button {
-                                onOpenIncident(incident)
+                                followUpIncident = incident
                             } label: {
                                 card(incident)
                             }
@@ -1851,6 +2025,21 @@ private struct PickUpView: View {
         .factTrailScreenBackground()
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(item: $followUpIncident) { incident in
+            PickUpFollowUpSheet(
+                incident: incident,
+                onSave: { updated in
+                    onSaveIncident(updated)
+                    followUpIncident = nil
+                },
+                onOpenFullEntry: {
+                    followUpIncident = nil
+                    onOpenIncident(incident)
+                }
+            )
+            .presentationDetents([.height(340)])
+            .presentationDragIndicator(.visible)
+        }
     }
 
     private var header: some View {
@@ -2320,20 +2509,29 @@ private struct IncidentEntryView: View {
     @State private var userProvidedIncidentDate: Bool
     @State private var localReviewSummary: IncidentSummaryDraft?
     @State private var isShowingLocalReview = false
+    @State private var isShowingDraftSaved = false
 
     let mode: EntryMode
     let aiService: any AIService
+    /// When editing an entry whose 5-minute window has passed, the original text is
+    /// immutable — only supplemental fields can be added.
+    let originalLocked: Bool
     let onCreateSummary: (IncidentSummaryDraft) -> Void
     let onSaveCreatedIncident: ((Incident) -> Void)?
     let onSaveEdit: ((IncidentDraft) -> Void)?
+    /// Dismisses the whole entry flow back to Home (e.g. "Delete entry" on the
+    /// post-save review, which discards the draft without saving it).
+    let onFinish: () -> Void
 
     init(
         initialDraft: IncidentDraft = IncidentDraft(),
         mode: EntryMode = .create,
         aiService: any AIService = MockAIService(),
+        originalLocked: Bool = false,
         onCreateSummary: @escaping (IncidentSummaryDraft) -> Void,
         onSaveCreatedIncident: ((Incident) -> Void)? = nil,
-        onSaveEdit: ((IncidentDraft) -> Void)? = nil
+        onSaveEdit: ((IncidentDraft) -> Void)? = nil,
+        onFinish: @escaping () -> Void = {}
     ) {
         _draft = State(initialValue: initialDraft)
         _aiSuggestion = State(initialValue: initialDraft.aiAnalysis)
@@ -2341,15 +2539,21 @@ private struct IncidentEntryView: View {
         _userProvidedIncidentDate = State(initialValue: mode == .edit)
         self.mode = mode
         self.aiService = aiService
+        self.originalLocked = originalLocked
         self.onCreateSummary = onCreateSummary
         self.onSaveCreatedIncident = onSaveCreatedIncident
         self.onSaveEdit = onSaveEdit
+        self.onFinish = onFinish
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 incidentTextCard
+                if originalLocked {
+                    lockBanner
+                }
+                dictationStatusRow
                 attachmentPills
                 optionalSpecificsSection
 
@@ -2368,6 +2572,31 @@ private struct IncidentEntryView: View {
             .padding(.bottom, 28)
         }
         .background(FactTrailTheme.background(for: colorScheme).ignoresSafeArea())
+        .overlay(alignment: .bottom) {
+            if isShowingDraftSaved {
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Draft saved")
+                            .font(.system(size: 14, weight: .semibold, design: .default))
+                            .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                        Text("Finish it anytime from Pick up where you left off.")
+                            .font(.system(size: 12, weight: .regular, design: .default))
+                            .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(FactTrailTheme.surface(for: colorScheme))
+                        .shadow(color: .black.opacity(0.14), radius: 12, y: 4)
+                )
+                .padding(.bottom, 40)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
         .navigationTitle(mode == .create ? "New entry" : "Edit entry")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
@@ -2403,7 +2632,7 @@ private struct IncidentEntryView: View {
                 }
             )
             .presentationDetents([.height(290)])
-            .presentationDragIndicator(.hidden)
+            .presentationDragIndicator(.visible)
         }
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
@@ -2429,31 +2658,25 @@ private struct IncidentEntryView: View {
                     userProvidedIncidentDate = true
                     isShowingDateClarification = false
                     commitSaveEntry()
-                },
-                onSkip: {
-                    draft.incidentDate = Date()
-                    isShowingDateClarification = false
-                    commitSaveEntry()
                 }
             )
-            .presentationDetents([.height(470)])
-            .presentationDragIndicator(.visible)
         }
         .navigationDestination(isPresented: $isShowingLocalReview) {
             if let localReviewSummary {
                 SummaryReviewView(
                     summaryDraft: localReviewSummary,
-                    onSave: {
+                    isGeneratingSummary: isGeneratingFinalDocumentation,
+                    generationError: finalDocumentationErrorMessage,
+                    onGenerateSummary: { generateFinalDocumentationForReview() },
+                    onClose: {
                         onSaveCreatedIncident?(localReviewSummary.incident)
                         self.localReviewSummary = nil
                         self.isShowingLocalReview = false
                     },
-                    onEdit: {
-                        isShowingLocalReview = false
-                    },
-                    onCancel: {
+                    onDelete: {
                         self.localReviewSummary = nil
                         self.isShowingLocalReview = false
+                        onFinish()
                     }
                 )
             } else {
@@ -2472,18 +2695,60 @@ private struct IncidentEntryView: View {
         }
     }
 
+    private var lockBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
+            Text("The original description is locked. You can still add details below — each addition is timestamped.")
+                .font(.system(size: 12.5, weight: .regular, design: .default))
+                .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(FactTrailTheme.border(for: colorScheme).opacity(colorScheme == .dark ? 0.18 : 0.35))
+        )
+    }
+
+    @ViewBuilder
+    private var dictationStatusRow: some View {
+        if speechTranscriber.isRecording {
+            HStack(spacing: 7) {
+                Circle()
+                    .fill(.red)
+                    .frame(width: 7, height: 7)
+                Text("Listening…")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
+                Spacer()
+            }
+            .padding(.horizontal, 2)
+            .transition(.opacity)
+        } else if let dictationError = speechTranscriber.errorMessage {
+            Text(dictationError)
+                .font(.system(size: 13))
+                .foregroundStyle(.red)
+                .padding(.horizontal, 2)
+        }
+    }
+
     private var incidentTextCard: some View {
         ZStack(alignment: .bottomTrailing) {
             TextEditor(text: $draft.originalNotes)
                 .font(.system(size: 15, weight: .regular, design: .default))
-                .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme).opacity(originalLocked ? 0.7 : 1))
                 .lineSpacing(6)
                 .padding(.horizontal, 16)
                 .padding(.top, 16)
-                .padding(.bottom, 56)
+                .padding(.bottom, originalLocked ? 16 : 56)
                 .frame(minHeight: 200)
                 .scrollContentBackground(.hidden)
                 .background(Color.clear)
+                .disabled(originalLocked)
                 .overlay(alignment: .topLeading) {
                     if draft.originalNotes.isEmpty {
                         Text("Describe what happened. Include specifics if you can, or just talk and we'll follow up.")
@@ -2496,41 +2761,60 @@ private struct IncidentEntryView: View {
                     }
                 }
 
-            Button {
-                toggleDictation()
-            } label: {
-                Image("codoc-microphone")
-                    .renderingMode(.template)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 17, height: 17)
-                    .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+            // No dictation into a locked original — it can't be changed after 5 minutes.
+            if !originalLocked {
+                Button {
+                    toggleDictation()
+                } label: {
+                    Group {
+                        if speechTranscriber.isRecording {
+                            Image(systemName: "stop.fill")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 14, height: 14)
+                                .foregroundStyle(.red)
+                        } else {
+                            Image("codoc-microphone")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 17, height: 17)
+                                .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+                        }
+                    }
                     .frame(width: 38, height: 38)
-                    .background(FactTrailTheme.aiAccent(for: colorScheme).opacity(0.12), in: Circle())
+                    .background(
+                        (speechTranscriber.isRecording ? Color.red : FactTrailTheme.aiAccent(for: colorScheme))
+                            .opacity(0.12),
+                        in: Circle()
+                    )
+                }
+                .buttonStyle(HomePressButtonStyle())
+                .accessibilityLabel(speechTranscriber.isRecording ? "Stop dictation" : "Start dictation")
+                .padding(.trailing, 12)
+                .padding(.bottom, 11)
             }
-            .buttonStyle(HomePressButtonStyle())
-            .padding(.trailing, 12)
-            .padding(.bottom, 11)
         }
+        // The card clips its contents to the rounded border (matching the reference
+        // `.input-card { overflow: hidden }`), so the left accent bar follows the
+        // rounded corners instead of poking past them, and the mic stays contained.
         .background {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(FactTrailTheme.surface(for: colorScheme))
-                .shadow(color: .black.opacity(colorScheme == .dark ? 0.24 : 0.08), radius: 12, y: 4)
-        }
-        .overlay(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                .fill(
+                .overlay(alignment: .leading) {
                     LinearGradient(
                         colors: [
-                            FactTrailTheme.aiAccent(for: colorScheme).opacity(0.85),
-                            FactTrailTheme.primaryAction(for: colorScheme).opacity(0.42)
+                            FactTrailTheme.aiAccent(for: colorScheme),
+                            FactTrailTheme.primaryAction(for: colorScheme)
                         ],
                         startPoint: .top,
                         endPoint: .bottom
                     )
-                )
-                .frame(width: 3)
-                .padding(.vertical, 0)
+                    .frame(width: 3)
+                    .opacity(0.5)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .shadow(color: .black.opacity(colorScheme == .dark ? 0.24 : 0.06), radius: 8, y: 2)
         }
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -2585,10 +2869,24 @@ private struct IncidentEntryView: View {
                     SpecificsTextRow(iconAssetName: "codoc-people", placeholder: "People involved", text: $draft.peopleInvolved)
                     SpecificsTextRow(iconAssetName: "codoc-location-pin", placeholder: "Location", text: $draft.location)
                     Toggle("Child involved?", isOn: $draft.childInvolved)
-                    Picker("Category", selection: $draft.category) {
-                        ForEach(IncidentCategory.allCases) { category in
-                            Text(category.rawValue).tag(category)
+
+                    // Explicitly labeled so the app-assigned category reads as a field,
+                    // not a stray value floating under the toggle.
+                    HStack {
+                        Text("Category")
+                            .font(.system(size: 15, weight: .regular, design: .default))
+                            .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                        Spacer()
+                        Picker("Category", selection: $draft.category) {
+                            // Exchange isn't an entry category (it's a check-in kind), so
+                            // it's excluded from the entry picker.
+                            ForEach(IncidentCategory.allCases.filter { $0 != .exchange }) { category in
+                                Text(category.rawValue).tag(category)
+                            }
                         }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .tint(FactTrailTheme.aiAccent(for: colorScheme))
                     }
                 }
                 .padding(16)
@@ -2658,7 +2956,7 @@ private struct IncidentEntryView: View {
 
             if mode == .create {
                 Button {
-                    saveEntry()
+                    saveAndFinishLater()
                 } label: {
                     Text("Save and finish this later")
                         .font(.system(size: 13, weight: .medium, design: .default))
@@ -2673,8 +2971,31 @@ private struct IncidentEntryView: View {
         .padding(.top, 10)
     }
 
+    /// Persists the entry quietly as a draft (skipping the review step) and shows a
+    /// brief confirmation, so "Save and finish this later" gives real feedback.
+    private func saveAndFinishLater() {
+        withAnimation(.snappy) { isShowingDraftSaved = true }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.2))
+            speechTranscriber.stopTranscribing()
+            applyCapturedIncidentLocationIfNeeded()
+            if draft.patternTags.isEmpty {
+                draft.patternTags = NeutralSummaryGenerator.suggestedPatternTags(for: draft)
+            }
+            let summary = NeutralSummaryGenerator.makeSummary(from: draft)
+            if let onSaveCreatedIncident {
+                onSaveCreatedIncident(summary.incident)
+            } else {
+                onCreateSummary(summary)
+            }
+        }
+    }
+
     private func saveEntry() {
-        if mode == .create && !userProvidedIncidentDate {
+        // Only ask "when did this happen?" when there's no date context already. If the
+        // user opened the specifics section, the date field lives there (defaulting to
+        // now), so the bottom-sheet prompt would be redundant.
+        if mode == .create && !userProvidedIncidentDate && !isShowingOptionalDetails {
             isShowingDateClarification = true
             return
         }
@@ -2951,6 +3272,31 @@ private struct IncidentEntryView: View {
         }
     }
 
+    /// Generates the documentation summary from the post-save review screen, then
+    /// rebuilds `localReviewSummary` so the review re-renders with the summary card.
+    /// The enriched draft is what gets persisted when the user taps Close.
+    private func generateFinalDocumentationForReview() {
+        applyCapturedIncidentLocationIfNeeded()
+        isGeneratingFinalDocumentation = true
+        finalDocumentationErrorMessage = nil
+
+        Task {
+            do {
+                let finalDocumentation = try await aiService.generateFinalDocumentation(
+                    draft: draft,
+                    analysis: aiSuggestion ?? draft.aiAnalysis
+                )
+                draft.finalDocumentation = finalDocumentation
+                draft.neutralSummaryOverride = finalDocumentation.summary
+                localReviewSummary = NeutralSummaryGenerator.makeSummary(from: draft)
+            } catch {
+                finalDocumentationErrorMessage = error.localizedDescription
+            }
+
+            isGeneratingFinalDocumentation = false
+        }
+    }
+
     private var debugUIState: String {
         """
         category=\(draft.category.rawValue)
@@ -3103,193 +3449,96 @@ private struct SpecificsIcon: View {
 private struct IncidentDateClarificationSheet: View {
     @Binding var selectedDate: Date
     let onConfirm: () -> Void
-    let onSkip: () -> Void
     @Environment(\.colorScheme) private var colorScheme
-    @State private var selectedOption: DateClarificationOption?
-    @State private var customDateText = ""
+
+    @State private var isPickingTime = false
+    @State private var detent: PresentationDetent = IncidentDateClarificationSheet.collapsedDetent
+
+    private static let collapsedDetent: PresentationDetent = .height(250)
+    private static let expandedDetent: PresentationDetent = .height(500)
+
+    /// Treat a time within a couple of minutes of now as "just now" so the
+    /// default reads naturally until the user deliberately picks another time.
+    private var isJustNow: Bool {
+        abs(selectedDate.timeIntervalSinceNow) < 120
+    }
+
+    private var whenLabel: String {
+        isJustNow ? "Just now" : DateFormatter.factTrailDateTime.string(from: selectedDate)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Circle()
-                        .fill(FactTrailTheme.aiAccent(for: colorScheme))
-                        .frame(width: 6, height: 6)
-                    Text("ONE QUICK THING")
-                        .font(.system(size: 11, weight: .bold, design: .default))
-                        .tracking(2)
-                        .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
-                }
-
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text("When did this happen?")
-                    .font(.system(size: 28, weight: .bold, design: .default))
+                    .font(.system(size: 23, weight: .bold, design: .default))
                     .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
-
-                Text("We'll use today's time automatically. If it happened earlier, let us know.")
-                    .font(.system(size: 16, weight: .regular, design: .default))
+                Text("Set to now by default. Tap the time to change it.")
+                    .font(.system(size: 13, weight: .regular, design: .default))
                     .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
-                    .lineSpacing(4)
             }
 
-            HStack(spacing: 10) {
-                ForEach(DateClarificationOption.allCases) { option in
-                    DateClarificationChip(
-                        option: option,
-                        isSelected: selectedOption == option,
-                        referenceDate: Date()
-                    ) {
-                        selectedOption = option
-                        selectedDate = option.date(from: Date())
-                    }
+            Button {
+                withAnimation(.snappy(duration: 0.28)) {
+                    isPickingTime.toggle()
+                    detent = isPickingTime ? Self.expandedDetent : Self.collapsedDetent
                 }
-            }
-
-            HStack(spacing: 12) {
-                Image("codoc-calendar")
-                    .renderingMode(.template)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 17, height: 17)
-                    .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
-
-                TextField("Or type a date and time...", text: $customDateText)
-                    .font(.system(size: 16, weight: .regular, design: .default))
-                    .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
-
-                Button {
-                    // Placeholder for future date dictation.
-                } label: {
-                    Image("codoc-microphone")
-                        .renderingMode(.template)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 14, height: 14)
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "clock")
+                        .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
-                        .frame(width: 30, height: 30)
-                        .background(FactTrailTheme.aiAccent(for: colorScheme).opacity(0.11), in: Circle())
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .background(FactTrailTheme.surface(for: colorScheme), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1.5)
-            }
-
-            VStack(spacing: 10) {
-                Button {
-                    if selectedOption == nil {
-                        selectedDate = Date()
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(whenLabel)
+                            .font(.system(size: 16, weight: .semibold, design: .default))
+                            .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                        Text(isPickingTime ? "Pick the date and time" : "Tap to adjust")
+                            .font(.system(size: 12, weight: .regular, design: .default))
+                            .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
                     }
-                    onConfirm()
-                } label: {
-                    Text("Save entry")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(FactTrailPrimaryButtonStyle())
-
-                Button(action: onSkip) {
-                    Text("Skip for now — we'll note when we received this")
-                        .font(.system(size: 14, weight: .medium, design: .default))
-                        .multilineTextAlignment(.center)
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 13, weight: .bold, design: .default))
                         .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
+                        .rotationEffect(.degrees(isPickingTime ? 180 : 0))
                 }
-                .buttonStyle(.plain)
+                .padding(14)
+                .background(FactTrailTheme.aiAccent(for: colorScheme).opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(FactTrailTheme.aiAccent(for: colorScheme).opacity(0.5), lineWidth: 1.5)
+                }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+
+            if isPickingTime {
+                DatePicker("", selection: $selectedDate, in: ...Date(), displayedComponents: [.date, .hourAndMinute])
+                    .datePickerStyle(.wheel)
+                    .labelsHidden()
+                    .frame(maxWidth: .infinity)
+            }
+
+            Button {
+                onConfirm()
+            } label: {
+                Text("Save entry")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(FactTrailPrimaryButtonStyle())
         }
         .padding(.horizontal, 22)
-        .padding(.top, 18)
-        .padding(.bottom, 24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.top, 20)
+        .padding(.bottom, 20)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(FactTrailTheme.surface(for: colorScheme).ignoresSafeArea())
-    }
-}
-
-private enum DateClarificationOption: CaseIterable, Identifiable {
-    case justNow
-    case earlierToday
-    case yesterday
-
-    var id: Self { self }
-
-    var title: String {
-        switch self {
-        case .justNow:
-            return "Just now"
-        case .earlierToday:
-            return "Earlier today"
-        case .yesterday:
-            return "Yesterday"
+        .presentationDetents([Self.collapsedDetent, Self.expandedDetent], selection: $detent)
+        .presentationDragIndicator(.visible)
+        .onAppear {
+            // This sheet only appears when no date was chosen yet, so anchor the
+            // default to the moment of saving — that's what "Just now" means.
+            if isJustNow { selectedDate = Date() }
         }
-    }
-
-    func subtitle(from date: Date) -> String {
-        switch self {
-        case .justNow:
-            return DateFormatter.factTrailTime.string(from: date)
-        case .earlierToday:
-            return DateFormatter.factTrailMonthDay.string(from: date)
-        case .yesterday:
-            let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: date) ?? date
-            return DateFormatter.factTrailWeekdayMonthDay.string(from: yesterday)
-        }
-    }
-
-    func date(from date: Date) -> Date {
-        switch self {
-        case .justNow, .earlierToday:
-            return date
-        case .yesterday:
-            return Calendar.current.date(byAdding: .day, value: -1, to: date) ?? date
-        }
-    }
-}
-
-private struct DateClarificationChip: View {
-    let option: DateClarificationOption
-    let isSelected: Bool
-    let referenceDate: Date
-    let action: () -> Void
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 5) {
-                Text(option.title)
-                    .font(.system(size: 16, weight: .semibold, design: .default))
-                    .foregroundStyle(isSelected ? FactTrailTheme.aiAccent(for: colorScheme) : FactTrailTheme.primaryText(for: colorScheme))
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-
-                Text(option.subtitle(from: referenceDate))
-                    .font(.system(size: 12, weight: .regular, design: .default))
-                    .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity, minHeight: 86)
-            .padding(.horizontal, 8)
-            .background(isSelected ? FactTrailTheme.aiAccent(for: colorScheme).opacity(0.10) : FactTrailTheme.surface(for: colorScheme), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(alignment: .topTrailing) {
-                Circle()
-                    .stroke(isSelected ? FactTrailTheme.aiAccent(for: colorScheme) : FactTrailTheme.border(for: colorScheme), lineWidth: 1.5)
-                    .background {
-                        if isSelected {
-                            Circle().fill(FactTrailTheme.aiAccent(for: colorScheme))
-                        }
-                    }
-                    .frame(width: 17, height: 17)
-                    .padding(8)
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(isSelected ? FactTrailTheme.aiAccent(for: colorScheme) : FactTrailTheme.border(for: colorScheme), lineWidth: 1.5)
-            }
-        }
-        .buttonStyle(HomePressButtonStyle())
     }
 }
 
@@ -3397,7 +3646,7 @@ private struct AIAnalysisCard: View {
             Divider()
 
             AIInsightRow(
-                title: "Suggested Category",
+                title: "Suggested category",
                 value: analysis.suggestedCategory.rawValue
             )
 
@@ -3408,21 +3657,21 @@ private struct AIAnalysisCard: View {
 
             if !analysis.missingInformation.isEmpty {
                 AIInsightRow(
-                    title: "Missing Information",
+                    title: "Missing information",
                     value: analysis.missingInformation.joined(separator: ", ")
                 )
             }
 
             if !analysis.evidenceMentioned.isEmpty {
                 AIInsightRow(
-                    title: "Evidence Mentioned",
+                    title: "Evidence mentioned",
                     value: analysis.evidenceMentioned.joined(separator: ", ")
                 )
             }
 
             if !analysis.patternTags.isEmpty {
                 AIInsightRow(
-                    title: "Possible Pattern Tags",
+                    title: "Possible pattern tags",
                     value: analysis.patternTags.map(\.displayName).joined(separator: ", ")
                 )
             }
@@ -3525,7 +3774,7 @@ private struct FinalDocumentationCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Final Documentation Summary")
+            Text("Final documentation summary")
                 .font(.headline)
 
             Text(finalDocumentation.summary)
@@ -3547,7 +3796,7 @@ private struct DocumentationCompletenessView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Documentation Completeness")
+                Text("Documentation completeness")
                     .font(.subheadline.bold())
                 Spacer()
                 Text("\(completeness.score)%")
@@ -3586,170 +3835,94 @@ private struct DocumentationCompletenessView: View {
 
 private struct SummaryReviewView: View {
     let summaryDraft: IncidentSummaryDraft
-    let onSave: () -> Void
-    let onEdit: () -> Void
-    let onCancel: () -> Void
-    @State private var pdfURL: URL?
-    @State private var pdfErrorMessage: String?
+    var isGeneratingSummary: Bool = false
+    var generationError: String? = nil
+    var onGenerateSummary: (() -> Void)? = nil
+    let onClose: () -> Void
+    let onDelete: () -> Void
+
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                ReviewSection(title: "Original Notes", text: summaryDraft.draft.originalNotes)
+                Text("Your entry is ready")
+                    .font(.system(size: 24, weight: .bold, design: .default))
+                    .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
 
-                if let analysis = summaryDraft.draft.aiAnalysis {
-                    ReviewSection(
-                        title: "AI Understanding",
-                        text: analysis.understandingSummary.isEmpty ? "Not available" : analysis.understandingSummary.joined(separator: "\n")
-                    )
-                }
+                ReviewSection(title: "What you logged", text: summaryDraft.draft.originalNotes)
 
-                ReviewSection(title: "Category", text: summaryDraft.draft.category.rawValue)
-
-                if let analysis = summaryDraft.draft.aiAnalysis, !analysis.evidenceMentioned.isEmpty {
-                    ReviewSection(title: "Evidence Mentioned", text: analysis.evidenceMentioned.joined(separator: ", "))
-                }
-
-                if !answeredGuidedQuestions.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Follow-Up Questions")
-                            .font(.headline)
-                        ForEach(Array(summaryDraft.followUpQuestions.enumerated()), id: \.offset) { index, question in
-                            Text("\(index + 1). \(question)")
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                    .padding()
-                    .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("User Responses")
-                            .font(.headline)
-                        ForEach(answeredGuidedQuestions) { answer in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(answer.question)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                Text(answer.answer)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-                    }
-                    .padding()
-                    .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
-                }
-
-                if !summaryDraft.draft.evidenceTypes.isEmpty || !summaryDraft.draft.patternTags.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        if !summaryDraft.draft.evidenceTypes.isEmpty {
-                            ReviewChipSection(
-                                title: "Evidence Types",
-                                values: summaryDraft.draft.evidenceTypes.map(\.rawValue)
-                            )
-                        }
-
-                        if !summaryDraft.draft.patternTags.isEmpty {
-                            ReviewChipSection(
-                                title: "Pattern Tags",
-                                values: summaryDraft.draft.patternTags.map(\.displayName)
-                            )
-                        }
-                    }
-                    .padding()
-                    .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
+                // Only surface a category when the user actually chose one — the default
+                // is neutral, so an unset entry shows no (possibly wrong) category label.
+                if summaryDraft.draft.category != .other {
+                    ReviewSection(title: "Category", text: summaryDraft.draft.category.rawValue)
                 }
 
                 if !summaryDraft.draft.evidenceAttachments.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Attached Photos and Screenshots")
+                        Text("Attachments")
                             .font(.headline)
                         EvidenceAttachmentGrid(
                             attachments: summaryDraft.draft.evidenceAttachments,
                             onRemove: nil
                         )
                     }
-                    .padding()
-                    .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
                 }
 
-                if let finalDocumentation = summaryDraft.draft.finalDocumentation {
-                    FinalDocumentationCard(finalDocumentation: finalDocumentation)
-                } else {
-                    ReviewSection(
-                        title: "Draft Summary",
-                        text: "Generate a Final Documentation Summary to create a complete narrative from the original notes and guided responses."
-                    )
-                }
+                summarySection
 
                 VStack(spacing: 12) {
-                    if let pdfURL {
-                        ShareLink(
-                            item: pdfURL,
-                            subject: Text("Coparo Summary"),
-                            message: Text("Coparo documentation summary")
-                        ) {
-                            Label("Export PDF", systemImage: "square.and.arrow.up")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(FactTrailGlassButtonStyle())
-                        .controlSize(.large)
-                    } else if let pdfErrorMessage {
-                        Text(pdfErrorMessage)
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                    } else {
-                        HStack {
-                            ProgressView()
-                            Text("Preparing PDF...")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Button(action: onSave) {
-                        Label("Save Incident", systemImage: "tray.and.arrow.down")
+                    Button(action: onClose) {
+                        Text("Close")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(FactTrailPrimaryButtonStyle())
                     .controlSize(.large)
 
-                    Button(action: onEdit) {
-                        Label("Edit Entry", systemImage: "pencil")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(FactTrailGlassButtonStyle())
-                    .controlSize(.large)
-
-                    Button(role: .cancel, action: onCancel) {
-                        Text("Cancel")
+                    Button(role: .destructive, action: onDelete) {
+                        Text("Delete entry")
+                            .foregroundStyle(.red)
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(FactTrailGlassButtonStyle())
                     .controlSize(.large)
                 }
+                .padding(.top, 4)
             }
             .padding(20)
         }
         .factTrailScreenBackground()
-        .navigationTitle("Review Summary")
+        .navigationTitle("Review")
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            preparePDF()
-        }
+        .navigationBarBackButtonHidden(true)
     }
 
-    private func preparePDF() {
-        do {
-            pdfURL = try IncidentPDFExporter.makePDF(for: summaryDraft)
-            pdfErrorMessage = nil
-        } catch {
-            pdfURL = nil
-            pdfErrorMessage = "PDF could not be prepared on this device."
-        }
-    }
+    @ViewBuilder
+    private var summarySection: some View {
+        if let finalDocumentation = summaryDraft.draft.finalDocumentation {
+            FinalDocumentationCard(finalDocumentation: finalDocumentation)
+        } else if let onGenerateSummary {
+            VStack(alignment: .leading, spacing: 8) {
+                Button(action: onGenerateSummary) {
+                    HStack(spacing: 8) {
+                        if isGeneratingSummary {
+                            ProgressView()
+                                .tint(FactTrailTheme.aiAccent(for: colorScheme))
+                        }
+                        Text(isGeneratingSummary ? "Generating…" : "Generate documentation summary")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(FactTrailGlassButtonStyle())
+                .controlSize(.large)
+                .disabled(isGeneratingSummary)
 
-    private var answeredGuidedQuestions: [GuidedQuestionAnswer] {
-        summaryDraft.draft.guidedAnswers.filter {
-            !$0.answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                if let generationError {
+                    Text(generationError)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
+            }
         }
     }
 }
@@ -4071,8 +4244,12 @@ private struct TimelineView: View {
     let onAddLinkedNote: (TimelineItem, String) -> Void
     let onDeleteAttachment: (StoredDocument) -> Void
     var onInsights: () -> Void = {}
+    /// When opened from an Insight's "View entries in timeline", this scopes the
+    /// timeline to that pattern's entries. Nil = show everything.
+    var initialTagFilter: String? = nil
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
+    @State private var insightTagFilter: String?
     @State private var selectedStyle: TimelineDisplayStyle = .branch
     @State private var density: TimelineDensity = .detailed
     @State private var calendarMode: TimelineCalendarMode = .month
@@ -4101,6 +4278,9 @@ private struct TimelineView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
+                        if let insightTagFilter {
+                            insightFilterBanner(tag: insightTagFilter)
+                        }
                         if let relatedFilterSource {
                             RelatedEntriesFilterBanner(source: relatedFilterSource, onClear: clearRelatedFilter)
                         }
@@ -4168,9 +4348,17 @@ private struct TimelineView: View {
             )
         }
         .factTrailScreenBackground()
+        .disablesInteractivePop()
         .navigationTitle(selectedStyle == .calendar ? "Calendar" : "Timeline")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .navigationBar)
+        .onAppear {
+            // Seed the insight filter once when arriving from "View entries in timeline".
+            if insightTagFilter == nil, let initialTagFilter {
+                insightTagFilter = initialTagFilter
+                selectedStyle = .list
+            }
+        }
         .overlay(alignment: .bottom) {
             if let message = saveErrorMessage {
                 Text(message)
@@ -4331,7 +4519,9 @@ private struct TimelineView: View {
     }
 
     private var chronologicalItems: [TimelineItem] {
-        filteredTimelineItems.sorted { $0.date < $1.date }
+        // Newest first so a just-added entry appears at the top of the branch, matching
+        // the list view. (Previously ascending, which buried new entries at the bottom.)
+        filteredTimelineItems.sorted { $0.date > $1.date }
     }
 
     private var groupedItems: [(key: TimelineGroupKey, items: [TimelineItem])] {
@@ -4371,9 +4561,13 @@ private struct TimelineView: View {
     }
 
     private var filteredTimelineItems: [TimelineItem] {
-        // No search/category filtering — the prototype shows everything, with
-        // "See related entries" (tag match) as the only filter.
-        let baseItems = timelineItems
+        var baseItems = timelineItems
+
+        // Insight filter: scope to the entries behind a pattern the user tapped
+        // "View entries in timeline" on.
+        if let insightTagFilter {
+            baseItems = baseItems.filter { matchesInsightTag($0, tag: insightTagFilter) }
+        }
 
         guard let relatedFilterSource else {
             return baseItems
@@ -4387,6 +4581,20 @@ private struct TimelineView: View {
         return baseItems.filter { item in
             item.id != relatedFilterSource.id
             && !Set(item.tags).isDisjoint(with: sourceTags)
+        }
+    }
+
+    /// Matches a timeline item to an Insight's tag. The recurring-pattern insights
+    /// tag by an entry-tag display name; the flagged/consistency insights are special.
+    private func matchesInsightTag(_ item: TimelineItem, tag: String) -> Bool {
+        switch tag {
+        case "flagged":
+            return item.isFlagged
+        case "checkin_consistency":
+            if case .checkIn = item { return true }
+            return false
+        default:
+            return item.tags.map(\.displayName).contains(tag)
         }
     }
 
@@ -4410,6 +4618,40 @@ private struct TimelineView: View {
         linkedNotes
             .filter { $0.parentItemID == item.id }
             .sorted { $0.createdAt < $1.createdAt }
+    }
+
+    private func insightFilterBanner(tag: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "line.3.horizontal.decrease.circle.fill")
+                .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+            Text("Showing entries for \(insightTagLabel(tag))")
+                .font(.system(size: 13, weight: .semibold, design: .default))
+                .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+            Spacer(minLength: 6)
+            Button("Clear") {
+                withAnimation(.snappy) { insightTagFilter = nil }
+            }
+            .font(.system(size: 13, weight: .semibold, design: .default))
+            .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(FactTrailTheme.aiAccent(for: colorScheme).opacity(0.09))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(FactTrailTheme.aiAccent(for: colorScheme).opacity(0.22), lineWidth: 1)
+                }
+        )
+    }
+
+    private func insightTagLabel(_ tag: String) -> String {
+        switch tag {
+        case "flagged": return "flagged entries"
+        case "checkin_consistency": return "check-ins"
+        default: return "\"\(tag)\""
+        }
     }
 
     private func showRelatedEntries(for item: TimelineItem) {
@@ -4502,11 +4744,11 @@ private struct TimelineLegend: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        HStack(spacing: 12) {
+        // Only the kinds that actually appear as nodes on the timeline/calendar.
+        // "Document" was removed: documents live in My Documents, not the timeline.
+        HStack(spacing: 14) {
             legendItem("Entry", color: FactTrailTheme.primaryAction(for: colorScheme))
             legendItem("Check-in", color: FactTrailTheme.aiAccent(for: colorScheme))
-            legendItem("Exchange", color: FactTrailTheme.primaryAction(for: colorScheme).opacity(0.72))
-            legendItem("Document", color: .green)
         }
         .font(.system(size: 12, weight: .medium, design: .default))
         .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
@@ -4629,11 +4871,12 @@ private struct BranchTimelineView: View {
         var currentYear: Int?
         var currentMonth: Int?
         var itemIndex = 0
-        var pendingAnnotations = annotations.sorted { $0.anchorDate < $1.anchorDate }
+        // Items are newest-first; interleave annotations in the same order.
+        var pendingAnnotations = annotations.sorted { $0.anchorDate > $1.anchorDate }
 
         for item in items {
-            // Flush AI pattern annotations that belong before this entry.
-            while let next = pendingAnnotations.first, next.anchorDate < item.date {
+            // Flush AI pattern annotations newer than this entry (so they sit above it).
+            while let next = pendingAnnotations.first, next.anchorDate > item.date {
                 rows.append(.annotation(next))
                 pendingAnnotations.removeFirst()
             }
@@ -4945,10 +5188,14 @@ private struct TimelineBadges: View {
     let item: TimelineItem
     let attachmentCount: Int
     @Environment(\.colorScheme) private var colorScheme
+    @State private var showingFlagReason = false
 
     var body: some View {
         let combinedAttachments = item.attachmentCount + attachmentCount
-        HStack(spacing: 7) {
+        // FlowLayout (not a fixed HStack) so the badges wrap to a new row instead of
+        // forcing the card wider than its column — which, in the narrow branch view,
+        // pushed cards off the left/right screen edges.
+        FlowLayout(spacing: 7, rowSpacing: 7) {
             if !item.locationText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 badge("Location", systemImage: "mappin.and.ellipse")
             }
@@ -4956,22 +5203,38 @@ private struct TimelineBadges: View {
                 badge("\(combinedAttachments)", systemImage: "paperclip")
             }
             if item.isFlagged {
-                badge("Flagged", systemImage: "flag")
+                // Amber is the app's flag/pattern color. Tapping explains why it's flagged.
+                Button {
+                    showingFlagReason = true
+                } label: {
+                    badge("Flagged", systemImage: "flag", tint: Color(hex: 0xD97706))
+                }
+                .buttonStyle(.plain)
+                .popover(isPresented: $showingFlagReason) {
+                    Text(item.flagReason ?? "Flagged for attention.")
+                        .font(.system(size: 14, weight: .regular, design: .default))
+                        .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: 260)
+                        .padding(16)
+                        .presentationCompactAdaptation(.popover)
+                }
             }
         }
     }
 
-    private func badge(_ text: String, systemImage: String) -> some View {
-        Label(text, systemImage: systemImage)
+    private func badge(_ text: String, systemImage: String, tint: Color? = nil) -> some View {
+        let color = tint ?? FactTrailTheme.aiAccent(for: colorScheme)
+        return Label(text, systemImage: systemImage)
             .font(.system(size: 11, weight: .semibold, design: .default))
-            .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+            .foregroundStyle(color)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
             .padding(.vertical, 4)
             .padding(.horizontal, 8)
             .background(
                 Capsule()
-                    .fill(FactTrailTheme.aiSoftBackground(for: colorScheme).opacity(0.78))
+                    .fill(color.opacity(0.12))
             )
     }
 }
@@ -4995,7 +5258,11 @@ private struct TimelineExpandedDetails: View {
                 TimelineDetailSection(title: "Location", text: item.locationText)
             }
 
-            TimelineDetailRow(label: "Occurred", value: DateFormatter.factTrailDateTime.string(from: item.date))
+            // A check-in is a deliberate action, not an event that "occurred".
+            TimelineDetailRow(
+                label: { if case .checkIn = item { return "Checked in" } else { return "Occurred" } }(),
+                value: DateFormatter.factTrailDateTime.string(from: item.date)
+            )
 
             if item.attachmentCount > 0 {
                 TimelineDetailRow(label: "Original evidence", value: "\(item.attachmentCount) file\(item.attachmentCount == 1 ? "" : "s")")
@@ -5039,10 +5306,7 @@ private struct TimelineStatusChips: View {
     var body: some View {
         HStack(spacing: 6) {
             chip(text: item.typeLabel, tone: .neutral)
-
-            if item.isFlagged {
-                chip(text: "Flagged", tone: .warning)
-            }
+            // The flag is shown once, as the amber badge on the card itself.
         }
     }
 
@@ -5424,6 +5688,7 @@ private struct CalendarTimelineView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var visibleMonth = Date()
     @State private var custodySchedule: CustodySchedule? = CustodyScheduleStore.load()
+    @State private var expandedDayItemIDs: Set<String> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -5451,16 +5716,23 @@ private struct CalendarTimelineView: View {
             let shown = schedule.caregivers.filter { caregiver in
                 schedule.cycle.contains(caregiver.id) || schedule.overrides.values.contains(caregiver.id)
             }
-            FlexibleWrap(spacing: 12) {
-                ForEach(shown) { caregiver in
-                    calendarLegend(
-                        caregiver.id == CustodyCaregiver.youID ? "Your days" : caregiver.name,
-                        color: CustodyPalette.color(caregiver.colorIndex).opacity(0.28)
-                    )
+            // Just the whose-day color key — the day-to-day color change already reads
+            // as the exchange, so a separate "Exchange" swatch was redundant.
+            VStack(alignment: .leading, spacing: 6) {
+                FlexibleWrap(spacing: 12) {
+                    ForEach(shown) { caregiver in
+                        calendarLegend(
+                            caregiver.id == CustodyCaregiver.youID ? "Your days" : caregiver.name,
+                            color: CustodyPalette.color(caregiver.colorIndex).opacity(0.28)
+                        )
+                    }
                 }
-                calendarLegend("Exchange", color: FactTrailTheme.aiAccent(for: colorScheme).opacity(0.24), stroked: true)
+                .font(.system(size: 12, weight: .medium, design: .default))
+
+                Text("A day is colored for whoever has the kids for most of it. Mid-day exchanges are counted to the parent with the larger share.")
+                    .font(.system(size: 11, weight: .regular, design: .default))
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .font(.system(size: 12, weight: .medium, design: .default))
             .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
         } else {
             Text("Set a custody schedule in Menu → Custody schedule to color-code whose day each day is.")
@@ -5472,7 +5744,7 @@ private struct CalendarTimelineView: View {
     private var monthHeader: some View {
         HStack {
             Button {
-                shiftVisibleMonth(by: -1)
+                shiftPeriod(by: -1)
             } label: {
                 Image(systemName: "chevron.left")
             }
@@ -5480,14 +5752,14 @@ private struct CalendarTimelineView: View {
 
             Spacer()
 
-            Text(monthTitle)
+            Text(headerTitle)
                 .font(.system(size: 20, weight: .bold, design: .default))
                 .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
 
             Spacer()
 
             Button {
-                shiftVisibleMonth(by: 1)
+                shiftPeriod(by: 1)
             } label: {
                 Image(systemName: "chevron.right")
             }
@@ -5598,24 +5870,51 @@ private struct CalendarTimelineView: View {
                     .padding(14)
             } else {
                 ForEach(dayItems) { item in
-                    HStack(spacing: 12) {
-                        Circle()
-                            .fill(item.timelineColor(for: colorScheme))
-                            .frame(width: 10, height: 10)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(item.title)
-                                .font(.system(size: 15, weight: .semibold, design: .default))
-                                .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
-                            Text("\(item.typeLabel) · \(DateFormatter.factTrailCompactDateTime.string(from: item.date))")
-                                .font(.caption)
-                                .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                    let isExpanded = expandedDayItemIDs.contains(item.id)
+                    Button {
+                        withAnimation(.snappy(duration: 0.22)) {
+                            if isExpanded {
+                                expandedDayItemIDs.remove(item.id)
+                            } else {
+                                expandedDayItemIDs.insert(item.id)
+                            }
                         }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme).opacity(0.5))
+                    } label: {
+                        VStack(alignment: .leading, spacing: 0) {
+                            HStack(spacing: 12) {
+                                Circle()
+                                    .fill(item.timelineColor(for: colorScheme))
+                                    .frame(width: 10, height: 10)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.title)
+                                        .font(.system(size: 15, weight: .semibold, design: .default))
+                                        .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                                    Text("\(item.typeLabel) · \(DateFormatter.factTrailCompactDateTime.string(from: item.date))")
+                                        .font(.caption)
+                                        .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.down")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme).opacity(0.5))
+                                    .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                            }
+
+                            if isExpanded {
+                                let summary = item.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+                                Text(summary.isEmpty ? "No additional details recorded." : summary)
+                                    .font(.system(size: 14, weight: .regular, design: .default))
+                                    .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.top, 10)
+                                    .padding(.leading, 22)
+                            }
+                        }
+                        .padding(14)
+                        .contentShape(Rectangle())
                     }
-                    .padding(14)
+                    .buttonStyle(.plain)
                     Divider()
                 }
             }
@@ -5685,6 +5984,20 @@ private struct CalendarTimelineView: View {
         visibleMonth.formatted(.dateTime.month(.wide).year())
     }
 
+    /// The header reads the visible month in month mode, and the selected week's
+    /// date range in week mode, so it always describes what the arrows will move.
+    private var headerTitle: String {
+        guard mode == .week else { return monthTitle }
+        let calendar = Calendar.current
+        guard let week = calendar.dateInterval(of: .weekOfMonth, for: selectedDate) else { return monthTitle }
+        let start = week.start
+        let end = calendar.date(byAdding: .day, value: 6, to: start) ?? start
+        if calendar.isDate(start, equalTo: end, toGranularity: .month) {
+            return "\(start.formatted(.dateTime.month(.abbreviated).day())) - \(end.formatted(.dateTime.day())), \(end.formatted(.dateTime.year()))"
+        }
+        return "\(start.formatted(.dateTime.month(.abbreviated).day())) - \(end.formatted(.dateTime.month(.abbreviated).day()))"
+    }
+
     private var shortWeekdays: [String] {
         Calendar.current.shortStandaloneWeekdaySymbols.map { $0.uppercased() }
     }
@@ -5720,9 +6033,17 @@ private struct CalendarTimelineView: View {
             .sorted { $0.date < $1.date }
     }
 
-    private func shiftVisibleMonth(by value: Int) {
-        visibleMonth = Calendar.current.date(byAdding: .month, value: value, to: visibleMonth) ?? visibleMonth
-        selectedDate = visibleMonth
+    /// In week mode the arrows step by one week (moving the selected week, which
+    /// drives the week grid); in month mode they step by one month.
+    private func shiftPeriod(by value: Int) {
+        let calendar = Calendar.current
+        if mode == .week {
+            selectedDate = calendar.date(byAdding: .weekOfYear, value: value, to: selectedDate) ?? selectedDate
+            visibleMonth = selectedDate
+        } else {
+            visibleMonth = calendar.date(byAdding: .month, value: value, to: visibleMonth) ?? visibleMonth
+            selectedDate = visibleMonth
+        }
     }
 
     private func isExchangeDay(_ date: Date) -> Bool {
@@ -5843,7 +6164,9 @@ private extension TimelineItem {
         case .incident:
             return FactTrailTheme.primaryAction(for: colorScheme)
         case .exchangeRecord:
-            return FactTrailTheme.primaryAction(for: colorScheme).opacity(0.76)
+            // Exchanges are a kind of check-in, so they share the accent teal node
+            // rather than reading as a separate blue/periwinkle category.
+            return FactTrailTheme.aiAccent(for: colorScheme)
         case .checkIn:
             return FactTrailTheme.aiAccent(for: colorScheme)
         }
@@ -5859,11 +6182,11 @@ private func insightAccent(_ type: InsightType, _ colorScheme: ColorScheme) -> C
 private extension EntryKind {
     var displayColor: Color {
         switch self {
-        case .entry: return Color(hex: 0x2F5D8C)
-        case .checkin: return Color(hex: 0x4F8F8B)
-        case .exchange: return Color(hex: 0x7B6FAB)
-        case .document: return Color(hex: 0x059669)
-        case .flag: return Color(hex: 0xD97706)
+        case .entry: return Color(hex: 0x2F5D8C)      // primary blue
+        case .checkin: return Color(hex: 0x4F8F8B)    // accent teal
+        case .exchange: return Color(hex: 0x4F8F8B)   // exchange is a check-in kind → teal
+        case .document: return Color(hex: 0x6E7E99)   // palette slate (was off-palette emerald)
+        case .flag: return Color(hex: 0xD97706)       // amber (established alert color)
         }
     }
 }
@@ -5873,6 +6196,8 @@ private struct InsightsScreenView: View {
     let aiService: any AIService
     let onHome: () -> Void
     let onTimeline: () -> Void
+    /// Opens the timeline filtered to the entries behind a specific pattern (its tag).
+    var onViewEntries: (String) -> Void = { _ in }
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
@@ -5895,6 +6220,7 @@ private struct InsightsScreenView: View {
             )
         }
         .factTrailScreenBackground()
+        .disablesInteractivePop()
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .navigationBar)
         .task {
@@ -5915,16 +6241,18 @@ private struct InsightsScreenView: View {
         } else if insights.isEmpty {
             emptyState
         } else {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    introBlock
-                    cardStack
-                    navDots
+            // Card + intro + dots are fixed; only the pattern list scrolls, so the
+            // horizontal card swipe and vertical scrolling never fight each other.
+            VStack(alignment: .leading, spacing: 0) {
+                introBlock
+                cardStack
+                navDots
+                ScrollView {
                     historySection
                     Color.clear.frame(height: 12)
                 }
+                .scrollIndicators(.hidden)
             }
-            .scrollIndicators(.hidden)
         }
     }
 
@@ -5982,21 +6310,31 @@ private struct InsightsScreenView: View {
         .padding(.bottom, 12)
     }
 
+    // The card sits OUTSIDE the vertical scroll (only the pattern list below scrolls),
+    // so a horizontal swipe has no vertical-scroll to fight. highPriority makes the
+    // swipe work anywhere on the card (over its buttons) and blocks the edge-back gesture.
     private var cardStack: some View {
         ZStack {
-            ForEach(visiblePositions.reversed(), id: \.self) { p in
-                let insight = insights[index + p]
-                InsightCardView(insight: insight, onSupportTap: onTimeline)
-                    .scaleEffect(p == 0 ? 1 : (p == 1 ? 0.97 : 0.94))
-                    .offset(y: p == 0 ? 0 : (p == 1 ? 8 : 16))
-                    .opacity(p == 0 ? 1 : (p == 1 ? 0.85 : 0.6))
-                    .offset(x: p == 0 ? dragOffset : 0)
-                    .rotationEffect(.degrees(p == 0 ? Double(dragOffset / 20) : 0))
-                    .zIndex(Double(3 - p))
-                    .gesture(p == 0 ? dragGesture : nil)
+            if index >= insights.count {
+                allCaughtUpCard
+                    .offset(x: dragOffset)
+                    .rotationEffect(.degrees(Double(dragOffset / 20)))
+                    .highPriorityGesture(dragGesture)
+            } else {
+                ForEach(visiblePositions.reversed(), id: \.self) { p in
+                    let insight = insights[index + p]
+                    InsightCardView(insight: insight, onSupportTap: { onViewEntries(insight.tag) })
+                        .scaleEffect(p == 0 ? 1 : (p == 1 ? 0.97 : 0.94))
+                        .offset(y: p == 0 ? 0 : (p == 1 ? 8 : 16))
+                        .opacity(p == 0 ? 1 : (p == 1 ? 0.85 : 0.6))
+                        .offset(x: p == 0 ? dragOffset : 0)
+                        .rotationEffect(.degrees(p == 0 ? Double(dragOffset / 20) : 0))
+                        .zIndex(Double(3 - p))
+                        .highPriorityGesture(p == 0 ? dragGesture : nil)
+                }
             }
         }
-        .frame(height: 400)
+        .frame(height: 300)
         .padding(.horizontal, 20)
         .padding(.bottom, 6)
     }
@@ -6006,18 +6344,19 @@ private struct InsightsScreenView: View {
     }
 
     private var dragGesture: some Gesture {
-        DragGesture()
+        DragGesture(minimumDistance: 12)
             .onChanged { value in
                 if abs(value.translation.width) > abs(value.translation.height) {
                     dragOffset = value.translation.width
                 }
             }
             .onEnded { value in
-                let threshold: CGFloat = 80
                 let w = value.translation.width
-                if w < -threshold && index < insights.count - 1 {
+                let predicted = value.predictedEndTranslation.width
+                let committed = abs(w) > 70 || abs(predicted) > 180
+                if committed && w < 0 && index < insights.count {
                     fling(to: -700, then: 1)
-                } else if w > threshold && index > 0 {
+                } else if committed && w > 0 && index > 0 {
                     fling(to: 700, then: -1)
                 } else {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.72)) { dragOffset = 0 }
@@ -6031,6 +6370,32 @@ private struct InsightsScreenView: View {
             index += delta
             dragOffset = 0
         }
+    }
+
+    private var allCaughtUpCard: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 46, weight: .regular))
+                .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+            Text("All caught up")
+                .font(.system(size: 22, weight: .bold, design: .default))
+                .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+            Text("You've reviewed every pattern. Swipe back to revisit, or see them all listed below.")
+                .font(.system(size: 14, weight: .regular, design: .default))
+                .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 24)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(FactTrailTheme.surface(for: colorScheme))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1)
+                }
+        )
     }
 
     private var navDots: some View {
@@ -6062,7 +6427,7 @@ private struct InsightsScreenView: View {
                             expandedHistoryID = expandedHistoryID == insight.id ? nil : insight.id
                         }
                     },
-                    onView: onTimeline
+                    onView: { onViewEntries(insight.tag) }
                 )
             }
         }
@@ -6552,17 +6917,18 @@ private struct IncidentExpandedDetailsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            TimelineDetailSection(title: "Original Notes", text: incident.originalNotes)
+            TimelineDetailSection(title: "Original notes", text: incident.originalNotes)
 
             if let analysis = incident.aiAnalysis {
                 TimelineDetailSection(
-                    title: "AI Understanding",
+                    title: "AI understanding",
                     text: analysis.understandingSummary.isEmpty ? "Not available" : analysis.understandingSummary.joined(separator: "\n")
                 )
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                TimelineDetailRow(label: "Category", value: incident.category)
+                // Never blank — show a neutral default so the field always reads clearly.
+                TimelineDetailRow(label: "Category", value: incident.category.isEmpty ? "Uncategorized" : incident.category)
                 TimelineDetailRow(label: "People", value: incident.peopleInvolved)
                 TimelineDetailRow(label: "Location", value: incident.location)
                 TimelineDetailRow(label: "Child involved", value: incident.childInvolved ? "Yes" : "No")
@@ -6571,21 +6937,21 @@ private struct IncidentExpandedDetailsView: View {
 
             if let analysis = incident.aiAnalysis, !analysis.evidenceMentioned.isEmpty {
                 TimelineDetailSection(
-                    title: "Evidence Mentioned",
+                    title: "Evidence mentioned",
                     text: analysis.evidenceMentioned.joined(separator: ", ")
                 )
             }
 
             if !incident.patternTags.isEmpty {
                 TimelineDetailSection(
-                    title: "Pattern Tags",
+                    title: "Pattern tags",
                     text: incident.patternTags.map(\.displayName).joined(separator: ", ")
                 )
             }
 
             if !incident.followUpQuestions.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Follow-Up Questions")
+                    Text("Follow-up questions")
                         .font(.subheadline.bold())
                     ForEach(Array(incident.followUpQuestions.enumerated()), id: \.offset) { index, question in
                         Text("\(index + 1). \(question)")
@@ -6597,7 +6963,7 @@ private struct IncidentExpandedDetailsView: View {
 
             if !answeredGuidedQuestions.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("User Responses")
+                    Text("User responses")
                         .font(.subheadline.bold())
                     ForEach(answeredGuidedQuestions) { answer in
                         VStack(alignment: .leading, spacing: 3) {
@@ -6614,14 +6980,36 @@ private struct IncidentExpandedDetailsView: View {
 
             if !incident.evidenceAttachments.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Attached Photos and Screenshots")
+                    Text("Attached photos and screenshots")
                         .font(.subheadline.bold())
                     EvidenceAttachmentGrid(attachments: incident.evidenceAttachments, onRemove: nil)
                 }
             }
 
-            if !incident.finalDocumentationSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                TimelineDetailSection(title: "Final Documentation Summary", text: incident.finalDocumentationSummary)
+            // Removed the single-entry "Final Documentation Summary" here: on the
+            // court-ready detail view it just restates the notes already shown above.
+
+            if !incident.auditLog.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Change history")
+                        .font(.subheadline.bold())
+                    ForEach(incident.auditLog) { entry in
+                        HStack(alignment: .top, spacing: 8) {
+                            Circle()
+                                .fill(Color.secondary.opacity(0.5))
+                                .frame(width: 5, height: 5)
+                                .padding(.top, 6)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(entry.action)
+                                    .font(.footnote)
+                                Text(DateFormatter.factTrailDateTime.string(from: entry.timestamp))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
             }
 
             if let completeness = incident.documentationCompleteness {
@@ -6635,7 +7023,7 @@ private struct IncidentExpandedDetailsView: View {
             Button {
                 onEdit(incident)
             } label: {
-                Label("Edit Incident", systemImage: "pencil")
+                Label("Edit entry", systemImage: "pencil")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)

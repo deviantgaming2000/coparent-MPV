@@ -54,7 +54,7 @@ private enum DocTypeFilter: CaseIterable, Identifiable {
         case .screenshots: return "Screenshots"
         case .photos: return "Photos"
         case .files: return "Files"
-        case .standalone: return "Standalone"
+        case .standalone: return "Unlinked"
         }
     }
 
@@ -417,7 +417,7 @@ private struct DocumentRow: View {
                             .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
                             .lineLimit(1)
                     } else {
-                        Text("Standalone — no linked entry")
+                        Text("Not linked to an entry")
                             .font(.system(size: 11, weight: .regular, design: .default))
                             .italic()
                             .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme).opacity(0.75))
@@ -464,13 +464,19 @@ struct AddDocumentSheet: View {
     @State private var pickedFileURL: URL?
     @State private var pickedFileName: String = ""
     @State private var isShowingFileImporter = false
+    @State private var isNoteMode = false
+    @State private var noteReference: String = ""
     @State private var errorMessage: String?
     @State private var isSaving = false
 
     private let documentStore = DocumentStore()
 
+    private var trimmedNoteReference: String {
+        noteReference.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private var hasSource: Bool {
-        photoData != nil || pickedFileURL != nil
+        photoData != nil || pickedFileURL != nil || (isNoteMode && !trimmedNoteReference.isEmpty)
     }
 
     var body: some View {
@@ -554,16 +560,52 @@ struct AddDocumentSheet: View {
                     sourceButtonLabel(title: "Photo", systemImage: "photo.on.rectangle")
                 }
                 .buttonStyle(.plain)
+                .simultaneousGesture(TapGesture().onEnded { isNoteMode = false })
 
                 Button {
+                    isNoteMode = false
                     isShowingFileImporter = true
                 } label: {
                     sourceButtonLabel(title: "File", systemImage: "doc.on.doc")
                 }
                 .buttonStyle(.plain)
+
+                Button {
+                    isNoteMode = true
+                    photoData = nil
+                    selectedPhoto = nil
+                    pickedFileURL = nil
+                } label: {
+                    sourceButtonLabel(title: "Note", systemImage: "text.quote")
+                }
+                .buttonStyle(.plain)
             }
 
-            if let photoData, let uiImage = UIImage(data: photoData) {
+            if isNoteMode {
+                // A text-only reference — e.g. for a video that's too large to store,
+                // note where it lives instead of attaching the file.
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Reference")
+                        .font(.system(size: 13, weight: .semibold, design: .default))
+                        .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                    TextField("e.g. Video saved to iPhone, dated July 5", text: $noteReference, axis: .vertical)
+                        .lineLimit(2...4)
+                        .textFieldStyle(.plain)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(FactTrailTheme.surface(for: colorScheme))
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1)
+                        }
+                    Text("No file is stored — this saves a note of where the media lives.")
+                        .font(.system(size: 12, weight: .regular, design: .default))
+                        .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                }
+            } else if let photoData, let uiImage = UIImage(data: photoData) {
                 selectedSourcePreview {
                     Image(uiImage: uiImage)
                         .resizable()
@@ -742,7 +784,11 @@ struct AddDocumentSheet: View {
             var fileType: DocumentFileType = .other
             var thumbnail: Data? = nil
 
-            if let photoData {
+            if isNoteMode {
+                // Note-only document: no file on disk, the reference lives in `notes`.
+                fileType = .text
+                fileName = ""
+            } else if let photoData {
                 let base = trimmedTitle.isEmpty ? photoSuggestedName : trimmedTitle
                 relativePath = try documentStore.importData(photoData, suggestedName: base, fileExtension: "jpg")
                 fileName = URL(fileURLWithPath: relativePath ?? "").lastPathComponent
@@ -759,12 +805,20 @@ struct AddDocumentSheet: View {
             }
 
             let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+            let combinedNotes: String?
+            if isNoteMode {
+                combinedNotes = [trimmedNoteReference, trimmedNotes]
+                    .filter { !$0.isEmpty }
+                    .joined(separator: "\n\n")
+            } else {
+                combinedNotes = trimmedNotes.isEmpty ? nil : trimmedNotes
+            }
             let document = StoredDocument(
                 title: trimmedTitle,
                 fileName: fileName,
                 fileType: fileType,
                 category: category,
-                notes: trimmedNotes.isEmpty ? nil : trimmedNotes,
+                notes: combinedNotes,
                 localFilePath: relativePath,
                 thumbnailData: thumbnail
             )

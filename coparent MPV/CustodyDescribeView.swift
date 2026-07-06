@@ -252,13 +252,14 @@ struct CustodyDescribeView: View {
         return trimmed.isEmpty ? "You" : trimmed
     }
 
-    /// You plus everyone in My people, matching the manual editor's caregiver list.
+    /// A custody schedule is only between two people: you and the co-parent (the
+    /// person marked "Co-parent" in My people, or a default). Matches the manual editor.
     static func currentCaregivers(youName: String) -> [CustodyCaregiver] {
-        var result: [CustodyCaregiver] = [CustodyCaregiver(id: CustodyCaregiver.youID, name: youName, colorIndex: 0)]
-        for (offset, person) in PeopleStore.load().enumerated() {
-            result.append(CustodyCaregiver(id: person.id.uuidString, name: person.name, colorIndex: offset + 1))
+        let you = CustodyCaregiver(id: CustodyCaregiver.youID, name: youName, colorIndex: 0)
+        if let coParent = PeopleStore.load().first(where: { $0.role == .coParent }) {
+            return [you, CustodyCaregiver(id: coParent.id.uuidString, name: coParent.name, colorIndex: 1)]
         }
-        return result
+        return [you, CustodyCaregiver(id: "coparent-default", name: "Co-parent", colorIndex: 1)]
     }
 
     // MARK: Dictation

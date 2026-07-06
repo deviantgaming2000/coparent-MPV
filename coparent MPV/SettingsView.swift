@@ -339,9 +339,27 @@ private struct MyPeopleView: View {
                                     Text(person.name)
                                         .font(.system(size: 15, weight: .medium))
                                         .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
-                                    Text(person.role.rawValue)
-                                        .font(.system(size: 12))
-                                        .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                                    Menu {
+                                        ForEach(PersonRole.allCases) { role in
+                                            Button {
+                                                setRole(role, for: person)
+                                            } label: {
+                                                if person.role == role {
+                                                    Label(role.rawValue, systemImage: "checkmark")
+                                                } else {
+                                                    Text(role.rawValue)
+                                                }
+                                            }
+                                        }
+                                    } label: {
+                                        HStack(spacing: 4) {
+                                            Text(person.role.rawValue)
+                                                .font(.system(size: 12))
+                                            Image(systemName: "chevron.up.chevron.down")
+                                                .font(.system(size: 9, weight: .semibold))
+                                        }
+                                        .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+                                    }
                                 }
                                 Spacer()
                                 Button {
@@ -402,6 +420,20 @@ private struct MyPeopleView: View {
 
     private func remove(_ person: SavedPerson) {
         people.removeAll { $0.id == person.id }
+        PeopleStore.save(people)
+    }
+
+    /// Change a person's role. Co-parent is exclusive — a custody schedule has
+    /// exactly one co-parent, so promoting someone demotes any previous one.
+    private func setRole(_ role: PersonRole, for person: SavedPerson) {
+        if role == .coParent {
+            for index in people.indices where people[index].role == .coParent {
+                people[index].role = .other
+            }
+        }
+        if let index = people.firstIndex(where: { $0.id == person.id }) {
+            people[index].role = role
+        }
         PeopleStore.save(people)
     }
 

@@ -13,8 +13,8 @@ struct CheckInSheetView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            sheetHandle
-
+            // The sheet uses the system drag indicator; content just needs top
+            // breathing room beneath it.
             VStack(alignment: .leading, spacing: 16) {
                 header
                 categoryGrid
@@ -24,7 +24,7 @@ struct CheckInSheetView: View {
             }
         }
         .padding(.horizontal, 22)
-        .padding(.top, 10)
+        .padding(.top, 44)
         .padding(.bottom, 20)
         .background(FactTrailTheme.surface(for: colorScheme).ignoresSafeArea())
         .onAppear {
@@ -50,28 +50,13 @@ struct CheckInSheetView: View {
         .animation(.snappy, value: showConfirmation)
     }
 
-    private var sheetHandle: some View {
-        Capsule()
-            .fill(FactTrailTheme.border(for: colorScheme))
-            .frame(width: 44, height: 5)
-            .frame(maxWidth: .infinity)
-            .padding(.top, 8)
-            .padding(.bottom, 18)
-    }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 12) {
-                Text("What's this check-in for?")
-                    .font(.system(size: 25, weight: .bold, design: .default))
-                    .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Spacer(minLength: 8)
-
-                locationStatusPill
-            }
+            Text("What's this check-in for?")
+                .font(.system(size: 25, weight: .bold, design: .default))
+                .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                .fixedSize(horizontal: false, vertical: true)
 
             Text("Pick one — we'll save your location and time automatically.")
                 .font(.system(size: 16, weight: .regular, design: .default))
@@ -350,19 +335,8 @@ private struct CheckInConfirmationView: View {
             FlowLayout(spacing: 8, rowSpacing: 8) {
                 CheckInTag(text: checkIn.displayLabel, style: .accent)
                 CheckInTag(text: DateFormatter.factTrailCompactDateTime.string(from: checkIn.createdAt), style: .accent)
-                CheckInTag(text: "Location saved", style: .muted)
             }
             .frame(maxWidth: .infinity)
-
-            Text("We'll ask if anything worth noting happened the next time you open the app.")
-                .font(.system(size: 17, weight: .regular, design: .default))
-                .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
-                .lineSpacing(4)
-                .multilineTextAlignment(.leading)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(FactTrailTheme.border(for: colorScheme).opacity(colorScheme == .dark ? 0.18 : 0.38), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
 
             Button(action: onDone) {
                 Text("Done")
@@ -427,7 +401,7 @@ private struct CheckInTag: View {
     }
 }
 
-private struct FlowLayout: Layout {
+struct FlowLayout: Layout {
     var spacing: CGFloat = 8
     var rowSpacing: CGFloat = 8
 

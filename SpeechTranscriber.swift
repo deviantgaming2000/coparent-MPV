@@ -145,6 +145,16 @@ final class SpeechTranscriber {
         recognitionTask = nil
         recognitionRequest = nil
 
+        // A segment can end WITHOUT ever emitting a final result — most commonly it
+        // times out on a natural pause and ends with an error. In that case the
+        // partial text lives only in `transcript` (partials never touch
+        // `committedTranscript`), so fold it in now. Without this, the next segment
+        // rebuilds from the stale committed text and the last thing said vanishes —
+        // the "dictation resets in the middle" symptom.
+        if !transcript.isEmpty {
+            committedTranscript = transcript
+        }
+
         guard !isStopping, audioEngine.isRunning else { return }
 
         let failedFast = Date().timeIntervalSince(lastSegmentStart) < 0.6
