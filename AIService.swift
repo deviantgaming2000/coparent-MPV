@@ -186,31 +186,21 @@ enum TimelineInsightEngine {
             annotations.append(
                 TimelineAnnotation(text: "Pattern of \(tag.lowercased()) begins here", anchorDate: first)
             )
-        }
-
-        // 2) Flagged clustering (>= 2 flagged entries).
-        let flagged = sorted.filter { $0.flagged }
-        if flagged.count >= 2 {
-            insights.append(
-                Insight(
-                    type: .concern,
-                    visual: .strip(dates: flagged.suffix(4).map { shortDate.string(from: $0.date) }),
-                    iconSystemName: "flag",
-                    eyebrow: "Flagged entries",
-                    headline: "Flagged incidents are adding up",
-                    body: "\(flagged.count) entries have been flagged for attention, from \(shortDate.string(from: flagged.first!.date)) to \(shortDate.string(from: flagged.last!.date)).",
-                    tag: "flagged",
-                    firstSeen: shortDate.string(from: flagged.first!.date),
-                    lastSeen: shortDate.string(from: flagged.last!.date),
-                    occurrences: flagged.count,
-                    supporting: flagged.suffix(3).reversed().map {
-                        InsightSupport(text: $0.title, date: shortDate.string(from: $0.date), kind: .flag)
-                    }
+            // Mark where the pattern was most recently noted too, so both the start and
+            // the latest occurrence are visible on the timeline.
+            if last > first {
+                annotations.append(
+                    TimelineAnnotation(text: "Pattern of \(tag.lowercased()) last noted here", anchorDate: last)
                 )
-            )
+            }
         }
 
-        // 3) Check-in consistency this month (affirming, >= 3).
+        // Flagged entries are intentionally NOT aggregated into a single "flagged
+        // incidents are adding up" insight — a flag is a property of an individual
+        // entry, and lumping unrelated flags together implies a pattern that may not
+        // exist. Each flagged entry stands alone in the timeline instead.
+
+        // 2) Check-in consistency this month (affirming, >= 3).
         let calendar = Calendar.current
         let checkIns = sorted.filter { $0.kind == .checkin }
         let now = Date()
@@ -339,7 +329,12 @@ struct MockAIService: AIService {
         var summaryDraft = draft
         if let analysis {
             summaryDraft.aiAnalysis = analysis
-            summaryDraft.category = analysis.suggestedCategory
+            // Only fill in a suggested category when the user left it at the neutral
+            // default — an explicit choice must never be silently overwritten.
+            if draft.category == .other {
+                summaryDraft.category = analysis.suggestedCategory
+                summaryDraft.categoryWasSuggested = true
+            }
             summaryDraft.patternTags = analysis.patternTags
         }
 

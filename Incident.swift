@@ -97,6 +97,9 @@ struct Incident: Identifiable, Codable, Equatable {
     let createdAt: Date
     let incidentDate: Date
     let category: String
+    /// True when the category was auto-suggested from the notes rather than chosen by
+    /// the user, so the UI can label it "Suggested" instead of presenting it as a fact.
+    let categoryWasSuggested: Bool
     let originalNotes: String
     let neutralSummary: String
     let peopleInvolved: String
@@ -129,6 +132,7 @@ struct Incident: Identifiable, Codable, Equatable {
         createdAt: Date,
         incidentDate: Date,
         category: String,
+        categoryWasSuggested: Bool = false,
         originalNotes: String,
         neutralSummary: String,
         peopleInvolved: String,
@@ -151,6 +155,7 @@ struct Incident: Identifiable, Codable, Equatable {
         self.createdAt = createdAt
         self.incidentDate = incidentDate
         self.category = category
+        self.categoryWasSuggested = categoryWasSuggested
         self.originalNotes = originalNotes
         self.neutralSummary = neutralSummary
         self.peopleInvolved = peopleInvolved
@@ -177,6 +182,7 @@ struct Incident: Identifiable, Codable, Equatable {
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         incidentDate = try container.decode(Date.self, forKey: .incidentDate)
         category = try container.decode(String.self, forKey: .category)
+        categoryWasSuggested = try container.decodeIfPresent(Bool.self, forKey: .categoryWasSuggested) ?? false
         originalNotes = try container.decode(String.self, forKey: .originalNotes)
         neutralSummary = try container.decode(String.self, forKey: .neutralSummary)
         peopleInvolved = try container.decode(String.self, forKey: .peopleInvolved)
@@ -256,6 +262,10 @@ struct IncidentDraft: Equatable {
     // Default to a neutral category. Previously this defaulted to `.exchange`,
     // which mislabeled every entry as an "Exchange" even with no supporting data.
     var category: IncidentCategory = .other
+    /// Set when the app fills the category from a suggestion; cleared when the user
+    /// picks one themselves. Surfaces a "Suggested" label so an auto-pick is never
+    /// mistaken for the user's own choice.
+    var categoryWasSuggested = false
 
     var canCreateSummary: Bool {
         !originalNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -273,6 +283,7 @@ struct IncidentSummaryDraft: Equatable {
             createdAt: Date(),
             incidentDate: draft.incidentDate,
             category: draft.category.rawValue,
+            categoryWasSuggested: draft.categoryWasSuggested,
             originalNotes: draft.originalNotes,
             neutralSummary: neutralSummary,
             peopleInvolved: draft.peopleInvolved,
@@ -301,6 +312,7 @@ extension Incident {
             createdAt: createdAt,
             incidentDate: incidentDate,
             category: category,
+            categoryWasSuggested: categoryWasSuggested,
             originalNotes: originalNotes,
             neutralSummary: neutralSummary,
             peopleInvolved: peopleInvolved,
@@ -346,6 +358,7 @@ extension Incident {
             draft.neutralSummaryOverride = neutralSummary
         }
         draft.category = IncidentCategory(rawValue: category) ?? .other
+        draft.categoryWasSuggested = categoryWasSuggested
         return draft
     }
 
@@ -388,6 +401,7 @@ extension Incident {
             createdAt: createdAt,
             incidentDate: draft.incidentDate,
             category: draft.category.rawValue,
+            categoryWasSuggested: draft.categoryWasSuggested,
             originalNotes: effectiveDraft.originalNotes,
             neutralSummary: summaryDraft.neutralSummary,
             peopleInvolved: draft.peopleInvolved,

@@ -8,6 +8,19 @@ struct SavedPerson: Identifiable, Codable, Hashable {
     var id = UUID()
     var name: String
     var role: PersonRole
+    /// Free-text relationship description, used when `role == .other`
+    /// (e.g. "my sister", "grandparent"). Optional so people saved before this
+    /// field existed still decode cleanly.
+    var roleDetail: String?
+
+    /// What to show for this person's relationship: their custom description
+    /// when they're "Other" and one was entered, otherwise the role label.
+    var displayRelationship: String {
+        if role == .other, let detail = roleDetail?.trimmingCharacters(in: .whitespacesAndNewlines), !detail.isEmpty {
+            return detail
+        }
+        return role.rawValue
+    }
 }
 
 enum PersonRole: String, Codable, CaseIterable, Identifiable {
@@ -93,11 +106,9 @@ struct SettingsView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(AccountManager.self) private var account
     @AppStorage("factTrailUserName") private var userName = ""
-    @AppStorage("factTrailAppearance") private var appearanceRaw = FactTrailAppearance.light.rawValue
     @AppStorage("coparoMode") private var modeRaw = CoparoMode.casual.rawValue
 
     private var mode: CoparoMode { CoparoMode(rawValue: modeRaw) ?? .casual }
-    private var appearance: FactTrailAppearance { FactTrailAppearance(rawValue: appearanceRaw) ?? .light }
 
     private var displayName: String {
         let trimmed = userName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -106,12 +117,12 @@ struct SettingsView: View {
         return "You"
     }
 
-    private var profileSubtitle: String {
-        if let session = account.session {
-            if let email = session.email, !email.isEmpty { return email }
-            return "Signed in with Apple"
-        }
-        return "Stored on this device"
+    /// Only shown when signed in (email or Apple). With no account there's no subtitle —
+    /// the bare "Stored on this device" line was confusing and added nothing here.
+    private var profileSubtitle: String? {
+        guard let session = account.session else { return nil }
+        if let email = session.email, !email.isEmpty { return email }
+        return "Signed in with Apple"
     }
 
     private var initial: String {
@@ -139,24 +150,16 @@ struct SettingsView: View {
                     menuSection {
                         SettingsRow(systemImage: "calendar", label: "Custody schedule", destination: CustodyDescribeView(userName: userName))
                         SettingsRow(systemImage: "shield", label: "Mode", trailing: .badge(mode.badge), destination: ModeView())
-                        SettingsRow(systemImage: "bell", label: "Notifications", destination: ComingSoonView(
-                            systemImage: "bell",
-                            title: "Notifications",
-                            message: "Gentle reminders to finish a thin entry or log an exchange, on your schedule. Coming soon."
-                        ))
-                        SettingsRow(systemImage: "sun.max", label: "Appearance", trailing: .value(appearance.rawValue), destination: AppearanceView())
                     }
 
                     fullDivider
 
+                    // Appearance, Notifications, Privacy & data and Export are grouped
+                    // under one Settings row so they don't sit as peers of higher-weight
+                    // items like My people and Custody schedule.
                     menuSection {
-                        SettingsRow(systemImage: "mic", label: "Privacy & data", destination: PrivacyDataView(onRestore: onRestore, onReset: onReset))
-                        Button {
-                            onExport()
-                        } label: {
-                            SettingsRowLabel(systemImage: "tray.and.arrow.down", label: "Export all data", trailing: .chevron)
-                        }
-                        .buttonStyle(.plain)
+                        SettingsRow(systemImage: "gearshape", label: "Settings", destination: AppSettingsView(onRestore: onRestore, onReset: onReset, onExport: onExport))
+                        SettingsRow(systemImage: "questionmark.circle", label: "Help & FAQ", destination: FAQView())
                     }
                 }
                 .padding(.bottom, 12)
@@ -194,9 +197,11 @@ struct SettingsView: View {
                 Text(displayName)
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
-                Text(profileSubtitle)
-                    .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                if let profileSubtitle {
+                    Text(profileSubtitle)
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                }
             }
 
             Spacer()
@@ -296,6 +301,63 @@ private struct SettingsRowLabel: View {
     }
 }
 
+// MARK: - Settings (consolidated)
+
+/// Groups the lower-weight app settings — appearance, notifications, and data — behind
+/// a single "Settings" row so the main menu stays focused on records and people.
+private struct AppSettingsView: View {
+    let onRestore: () -> Void
+    let onReset: () -> Void
+    let onExport: () -> Void
+
+    @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("factTrailAppearance") private var appearanceRaw = FactTrailAppearance.light.rawValue
+
+    private var appearance: FactTrailAppearance { FactTrailAppearance(rawValue: appearanceRaw) ?? .light }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                menuSection {
+                    SettingsRow(systemImage: "sun.max", label: "Appearance", trailing: .value(appearance.rawValue), destination: AppearanceView())
+                    SettingsRow(systemImage: "bell", label: "Notifications", destination: ComingSoonView(
+                        systemImage: "bell",
+                        title: "Notifications",
+                        message: "Gentle reminders to finish a thin entry or log an exchange, on your schedule. Coming soon."
+                    ))
+                }
+
+                fullDivider
+
+                menuSection {
+                    SettingsRow(systemImage: "lock.shield", label: "Privacy & data", destination: PrivacyDataView(onRestore: onRestore, onReset: onReset))
+                    Button {
+                        onExport()
+                    } label: {
+                        SettingsRowLabel(systemImage: "tray.and.arrow.down", label: "Export all data", trailing: .chevron)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, 8)
+        }
+        .background(FactTrailTheme.surface(for: colorScheme).ignoresSafeArea())
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var fullDivider: some View {
+        Rectangle()
+            .fill(FactTrailTheme.border(for: colorScheme).opacity(0.6))
+            .frame(height: 1)
+            .padding(.vertical, 8)
+    }
+
+    private func menuSection<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(spacing: 0) { content() }
+    }
+}
+
 // MARK: - My people
 
 private struct MyPeopleView: View {
@@ -304,6 +366,7 @@ private struct MyPeopleView: View {
     @State private var people: [SavedPerson] = []
     @State private var draftName = ""
     @State private var draftRole: PersonRole = .coParent
+    @State private var draftRoleOther = ""
 
     var body: some View {
         ScrollView {
@@ -312,7 +375,7 @@ private struct MyPeopleView: View {
                     .font(.system(size: 13))
                     .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
 
-                labeledField("What should the app call you?") {
+                labeledField("What should we call you?") {
                     TextField("Your name", text: $userName)
                         .textFieldStyle(.plain)
                         .fieldChrome(colorScheme)
@@ -331,44 +394,53 @@ private struct MyPeopleView: View {
                             .padding(.vertical, 8)
                     } else {
                         ForEach(people) { person in
-                            HStack(spacing: 12) {
-                                Image(systemName: person.role.systemImage)
-                                    .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
-                                    .frame(width: 24)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(person.name)
-                                        .font(.system(size: 15, weight: .medium))
-                                        .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
-                                    Menu {
-                                        ForEach(PersonRole.allCases) { role in
-                                            Button {
-                                                setRole(role, for: person)
-                                            } label: {
-                                                if person.role == role {
-                                                    Label(role.rawValue, systemImage: "checkmark")
-                                                } else {
-                                                    Text(role.rawValue)
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack(spacing: 12) {
+                                    Image(systemName: person.role.systemImage)
+                                        .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+                                        .frame(width: 24)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(person.name)
+                                            .font(.system(size: 15, weight: .medium))
+                                            .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                                        Menu {
+                                            ForEach(PersonRole.allCases) { role in
+                                                Button {
+                                                    setRole(role, for: person)
+                                                } label: {
+                                                    if person.role == role {
+                                                        Label(role.rawValue, systemImage: "checkmark")
+                                                    } else {
+                                                        Text(role.rawValue)
+                                                    }
                                                 }
                                             }
+                                        } label: {
+                                            HStack(spacing: 4) {
+                                                Text(person.displayRelationship)
+                                                    .font(.system(size: 12))
+                                                Image(systemName: "chevron.up.chevron.down")
+                                                    .font(.system(size: 9, weight: .semibold))
+                                            }
+                                            .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
                                         }
-                                    } label: {
-                                        HStack(spacing: 4) {
-                                            Text(person.role.rawValue)
-                                                .font(.system(size: 12))
-                                            Image(systemName: "chevron.up.chevron.down")
-                                                .font(.system(size: 9, weight: .semibold))
-                                        }
-                                        .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
                                     }
+                                    Spacer()
+                                    Button {
+                                        remove(person)
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                                    }
+                                    .buttonStyle(.plain)
                                 }
-                                Spacer()
-                                Button {
-                                    remove(person)
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+
+                                if person.role == .other {
+                                    TextField("Who are they? (e.g. my sister)", text: detailBinding(for: person))
+                                        .textFieldStyle(.plain)
+                                        .font(.system(size: 13))
+                                        .fieldChrome(colorScheme)
                                 }
-                                .buttonStyle(.plain)
                             }
                             .padding(.vertical, 10)
                             .padding(.horizontal, 12)
@@ -392,6 +464,12 @@ private struct MyPeopleView: View {
                     }
                     .pickerStyle(.segmented)
 
+                    if draftRole == .other {
+                        TextField("Who are they? (e.g. my sister, grandparent)", text: $draftRoleOther)
+                            .textFieldStyle(.plain)
+                            .fieldChrome(colorScheme)
+                    }
+
                     Button {
                         addDraft()
                     } label: {
@@ -413,14 +491,29 @@ private struct MyPeopleView: View {
     private func addDraft() {
         let name = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
-        people.append(SavedPerson(name: name, role: draftRole))
+        let detail = draftRoleOther.trimmingCharacters(in: .whitespacesAndNewlines)
+        people.append(SavedPerson(name: name, role: draftRole, roleDetail: draftRole == .other && !detail.isEmpty ? detail : nil))
         PeopleStore.save(people)
         draftName = ""
+        draftRoleOther = ""
     }
 
     private func remove(_ person: SavedPerson) {
         people.removeAll { $0.id == person.id }
         PeopleStore.save(people)
+    }
+
+    /// A live binding to a person's free-text relationship, persisting each edit.
+    private func detailBinding(for person: SavedPerson) -> Binding<String> {
+        Binding(
+            get: { people.first(where: { $0.id == person.id })?.roleDetail ?? "" },
+            set: { newValue in
+                guard let index = people.firstIndex(where: { $0.id == person.id }) else { return }
+                let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                people[index].roleDetail = trimmed.isEmpty ? nil : newValue
+                PeopleStore.save(people)
+            }
+        )
     }
 
     /// Change a person's role. Co-parent is exclusive — a custody schedule has
@@ -451,7 +544,9 @@ private struct MyPeopleView: View {
 
 private struct ModeView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(EntitlementManager.self) private var entitlements
     @AppStorage("coparoMode") private var modeRaw = CoparoMode.casual.rawValue
+    @State private var showingPaywall = false
 
     var body: some View {
         ScrollView {
@@ -462,8 +557,15 @@ private struct ModeView: View {
 
                 ForEach(CoparoMode.allCases) { option in
                     let isSelected = modeRaw == option.rawValue
+                    // Court Mode is part of Coparo Plus; it's available during the free
+                    // trial and with a subscription. Otherwise, tapping opens the paywall.
+                    let isLocked = option == .court && !entitlements.isPremium
                     Button {
-                        modeRaw = option.rawValue
+                        if isLocked {
+                            showingPaywall = true
+                        } else {
+                            modeRaw = option.rawValue
+                        }
                     } label: {
                         HStack(alignment: .top, spacing: 12) {
                             Image(systemName: option.systemImage)
@@ -471,16 +573,26 @@ private struct ModeView: View {
                                 .foregroundStyle(isSelected ? FactTrailTheme.primaryAction(for: colorScheme) : FactTrailTheme.mutedText(for: colorScheme))
                                 .frame(width: 28)
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(option.title)
-                                    .font(.system(size: 15, weight: .semibold))
-                                    .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                                HStack(spacing: 7) {
+                                    Text(option.title)
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                                    if option == .court {
+                                        Text("PLUS")
+                                            .font(.system(size: 9, weight: .bold))
+                                            .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+                                            .padding(.vertical, 2)
+                                            .padding(.horizontal, 6)
+                                            .background(FactTrailTheme.aiAccent(for: colorScheme).opacity(0.14), in: Capsule())
+                                    }
+                                }
                                 Text(option.summary)
                                     .font(.system(size: 13))
                                     .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             Spacer(minLength: 0)
-                            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                            Image(systemName: isLocked ? "lock.fill" : (isSelected ? "checkmark.circle.fill" : "circle"))
                                 .foregroundStyle(isSelected ? FactTrailTheme.primaryAction(for: colorScheme) : FactTrailTheme.mutedText(for: colorScheme).opacity(0.5))
                         }
                         .padding(14)
@@ -493,12 +605,71 @@ private struct ModeView: View {
                     }
                     .buttonStyle(.plain)
                 }
+
+                trialStatusCard
+
+                immutabilityCard
             }
             .padding(20)
         }
         .background(FactTrailTheme.background(for: colorScheme).ignoresSafeArea())
         .navigationTitle("Mode")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(isPresented: $showingPaywall) { CoparoPlusView() }
+    }
+
+    private var trialStatusCard: some View {
+        Button { showingPaywall = true } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+                    .frame(width: 30)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Coparo Plus")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                    Text(entitlements.statusLine)
+                        .font(.system(size: 12))
+                        .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme).opacity(0.6))
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(FactTrailTheme.aiAccent(for: colorScheme).opacity(0.06)))
+            .overlay { RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(FactTrailTheme.aiAccent(for: colorScheme).opacity(0.22), lineWidth: 1) }
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Plain-language explanation of what makes the log trustworthy — no legal jargon.
+    private var immutabilityCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(FactTrailTheme.primaryAction(for: colorScheme))
+                Text("Your records are locked in")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+            }
+            Text("Every entry is stamped with the exact date and time you save it. A few minutes after you save, the original is locked - it can't be edited or deleted. You can still add follow-up notes later, and each one is timestamped on its own. That's what makes your log a reliable record you can stand behind.")
+                .font(.system(size: 13))
+                .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(FactTrailTheme.primaryAction(for: colorScheme).opacity(0.06)))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(FactTrailTheme.primaryAction(for: colorScheme).opacity(0.22), lineWidth: 1)
+        }
+        .padding(.top, 4)
     }
 }
 

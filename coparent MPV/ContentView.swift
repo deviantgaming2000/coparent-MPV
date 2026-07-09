@@ -35,6 +35,10 @@ struct ContentView: View {
     @State private var pendingCheckInIncidentDraft: IncidentDraft?
     @State private var pendingCheckInIncidentID: UUID?
     @State private var isShowingLaunchScreen = true
+    @State private var isShowingPickUp = false
+    /// When the user opens a full entry from the Pick Up sheet, we stash the id and
+    /// push the editor after the sheet finishes dismissing (avoids nav-under-sheet).
+    @State private var pickUpPendingEditID: UUID?
 
     private let incidentStore = IncidentStore()
     private let exchangeRecordStore = ExchangeRecordStore()
@@ -67,7 +71,7 @@ struct ContentView: View {
                         onOpenExchangeRecord: { _ in
                             path.append(.timeline)
                         },
-                        onPickUp: { path.append(.pickup) }
+                        onPickUp: { isShowingPickUp = true }
                     )
                 } else {
                     OnboardingView {
@@ -143,6 +147,7 @@ struct ContentView: View {
                         checkIns: checkIns,
                         linkedNotes: linkedNotes,
                         attachmentsProvider: { attachments(forTimelineItemID: $0) },
+                        allDocuments: storedDocuments,
                         saveErrorMessage: saveErrorMessage,
                         onEdit: { incident in
                             path.append(.edit(incident.id))
@@ -214,16 +219,24 @@ struct ContentView: View {
                             linkedEntryTitle(for: document)
                         }
                     )
-                case .pickup:
-                    PickUpView(
-                        incidents: incidents.filter { $0.exchangeRecordID == nil && $0.needsMoreDetail },
-                        onOpenIncident: { incident in
-                            path.append(.edit(incident.id))
-                        },
-                        onSaveIncident: { updateIncident($0) }
-                    )
                 }
             }
+        }
+        .sheet(isPresented: $isShowingPickUp, onDismiss: {
+            if let id = pickUpPendingEditID {
+                pickUpPendingEditID = nil
+                path.append(.edit(id))
+            }
+        }) {
+            PickUpView(
+                incidents: incidents.filter { $0.exchangeRecordID == nil && $0.needsMoreDetail },
+                onOpenIncident: { incident in
+                    pickUpPendingEditID = incident.id
+                    isShowingPickUp = false
+                },
+                onSaveIncident: { updateIncident($0) }
+            )
+            .presentationDragIndicator(.visible)
         }
         .preferredColorScheme(selectedAppearance.colorScheme)
         .tint(FactTrailTheme.primaryAction(for: selectedAppearance.colorScheme))
@@ -857,130 +870,7 @@ private struct ShareSheet: UIViewControllerRepresentable {
 /// an animated logo - the gradient mark springs in, a soft halo breathes behind
 /// it, and a single sheen sweeps across it once as the wordmark settles.
 private struct FactTrailSplashView: View {
-    @Environment(\.colorScheme) private var colorScheme
-
-    @State private var markIn = false
-    @State private var textIn = false
-    @State private var breathe = false
-    @State private var sheenX: CGFloat = -1
-    @State private var drift = false
-
-    private var primary: Color { FactTrailTheme.primaryAction(for: colorScheme) }
-    private var accent: Color { FactTrailTheme.aiAccent(for: colorScheme) }
-
-    var body: some View {
-        ZStack {
-            background
-
-            VStack(spacing: 22) {
-                logoMark
-                    .scaleEffect(markIn ? 1 : 0.82)
-                    .opacity(markIn ? 1 : 0)
-
-                VStack(spacing: 7) {
-                    Text("Coparo")
-                        .font(.system(size: 34, weight: .bold, design: .rounded))
-                        .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
-                    Text("A clear record, quietly kept.")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
-                }
-                .opacity(textIn ? 1 : 0)
-                .offset(y: textIn ? 0 : 10)
-            }
-        }
-        .ignoresSafeArea()
-        .onAppear(perform: runAnimation)
-    }
-
-    private var logoMark: some View {
-        ZStack {
-            Circle()
-                .fill(accent.opacity(0.30))
-                .frame(width: 150, height: 150)
-                .blur(radius: 40)
-                .scaleEffect(breathe ? 1.08 : 0.92)
-                .opacity(markIn ? 1 : 0)
-
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [primary, accent],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .frame(width: 104, height: 104)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [.white.opacity(0.30), .clear],
-                                startPoint: .top,
-                                endPoint: .center
-                            )
-                        )
-                }
-                .overlay {
-                    Text("C")
-                        .font(.system(size: 54, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                }
-                .overlay { sheen }
-                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-                .shadow(color: primary.opacity(0.32), radius: 22, x: 0, y: 14)
-                .scaleEffect(breathe ? 1.015 : 1.0)
-        }
-    }
-
-    private var sheen: some View {
-        GeometryReader { geo in
-            LinearGradient(
-                colors: [.clear, .white.opacity(0.55), .clear],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .frame(width: geo.size.width * 0.6)
-            .rotationEffect(.degrees(18))
-            .offset(x: sheenX * geo.size.width * 1.6)
-        }
-    }
-
-    private var background: some View {
-        ZStack {
-            FactTrailTheme.background(for: colorScheme)
-
-            Circle()
-                .fill(primary.opacity(colorScheme == .dark ? 0.22 : 0.12))
-                .frame(width: 300, height: 300)
-                .blur(radius: 70)
-                .offset(x: drift ? -110 : -150, y: drift ? -180 : -230)
-
-            Circle()
-                .fill(accent.opacity(colorScheme == .dark ? 0.20 : 0.12))
-                .frame(width: 340, height: 340)
-                .blur(radius: 80)
-                .offset(x: drift ? 150 : 120, y: drift ? 210 : 250)
-        }
-    }
-
-    private func runAnimation() {
-        withAnimation(.easeInOut(duration: 6).repeatForever(autoreverses: true)) {
-            drift = true
-        }
-        withAnimation(.spring(response: 0.65, dampingFraction: 0.72)) {
-            markIn = true
-        }
-        withAnimation(.easeInOut(duration: 2.6).repeatForever(autoreverses: true).delay(0.3)) {
-            breathe = true
-        }
-        withAnimation(.easeOut(duration: 0.55).delay(0.3)) {
-            textIn = true
-        }
-        withAnimation(.easeInOut(duration: 0.8).delay(0.45)) {
-            sheenX = 1
-        }
-    }
+    var body: some View { CoparoSplashView() }
 }
 
 /// Maps the UI's timeline items to the neutral inputs consumed by the insights engine.
@@ -1015,7 +905,6 @@ private enum AppRoute: Hashable {
     case exchangeRecord
     case edit(UUID)
     case documents
-    case pickup
 }
 
 private enum EntryMode {
@@ -1242,35 +1131,28 @@ private struct OnboardingView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Coparo")
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Welcome to Coparo")
                         .font(.largeTitle.bold())
-                    Text("A calm place to organize parenting documentation and preserve important records.")
+                    Text("A calm, private place to keep track of your co-parenting - the events, exchanges, and little details that are easy to forget.")
                         .font(.headline)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Documentation Only")
-                        .font(.title3.bold())
-                    Text("This app helps you record events, organize facts, and create neutral summaries for your own records.")
-                    Text("This app does not provide legal advice.")
-                        .font(.headline)
+                VStack(alignment: .leading, spacing: 14) {
+                    OnboardingHighlight(icon: "note.text", text: "Jot things down as they happen. Add a little or a lot - whatever you have time for.")
+                    OnboardingHighlight(icon: "clock", text: "Everything is time-stamped and organized for you automatically.")
+                    OnboardingHighlight(icon: "lock", text: "Your records stay private on your device.")
                 }
-                .padding()
-                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Preserve Original Records")
-                        .font(.title3.bold())
-                    PreservationReminder(text: "Do not delete text messages.")
-                    PreservationReminder(text: "Turn off auto-delete for messages where possible.")
-                    PreservationReminder(text: "Save screenshots, call logs, emails, school records, medical records, and exchange details.")
-                    PreservationReminder(text: "Preserve original records.")
-                }
+                Text("Coparo helps you organize your own records. It doesn't provide legal advice.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Button(action: onAccept) {
-                    Text("I Understand")
+                    Text("Get started")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(FactTrailPrimaryButtonStyle())
@@ -1282,14 +1164,18 @@ private struct OnboardingView: View {
     }
 }
 
-private struct PreservationReminder: View {
+private struct OnboardingHighlight: View {
+    let icon: String
     let text: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(.tint)
+                .frame(width: 26)
             Text(text)
+                .font(.callout)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -1306,7 +1192,7 @@ private struct UserNameSetupView: View {
                 Text("Welcome to Coparo")
                     .font(.title.bold())
 
-                Text("What should the app call you?")
+                Text("What should we call you?")
                     .font(.body)
                     .foregroundStyle(.secondary)
             }
@@ -1316,10 +1202,6 @@ private struct UserNameSetupView: View {
                 .autocorrectionDisabled()
                 .padding()
                 .factTrailGlassCard(cornerRadius: 18)
-
-            Text("This stays on this device for now. Later this can come from your Apple account.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
 
             Button {
                 saveName()
@@ -1848,7 +1730,9 @@ private struct HomeLastLoggedCard: View {
     private var isFlagged: Bool {
         switch item {
         case .incident(let incident):
-            return incident.childInvolved || incident.patternTags.contains(.safetyConcern)
+            // Only a genuine safety concern flags an entry, matching the timeline's
+            // flag logic so a flag always has a surfaced, explainable reason.
+            return incident.patternTags.contains(.safetyConcern)
         case .exchangeRecord(let record, let attachedIncident):
             return record.timing != .onTime || attachedIncident != nil
         case .checkIn:
@@ -1933,16 +1817,22 @@ private struct PickUpFollowUpSheet: View {
                     .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
             }
 
-            TextField(placeholder, text: $value, axis: .vertical)
-                .lineLimit(1...3)
-                .font(.system(size: 16, weight: .regular, design: .default))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(FactTrailTheme.surface(for: colorScheme), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1.5)
-                }
+            if field == .people {
+                // Tap yourself, your co-parent, or kids from My people — with a
+                // freehand fallback — instead of typing every name.
+                PeopleTagField(text: $value)
+            } else {
+                TextField(placeholder, text: $value, axis: .vertical)
+                    .lineLimit(1...3)
+                    .font(.system(size: 16, weight: .regular, design: .default))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .background(FactTrailTheme.surface(for: colorScheme), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1.5)
+                    }
+            }
 
             Button(action: save) {
                 Text("Save")
@@ -2042,32 +1932,18 @@ private struct PickUpView: View {
         }
     }
 
+    // Presented as a bottom sheet: swipe down (or the drag indicator) dismisses it,
+    // so there's no top-left back button. The title just anchors the sheet.
     private var header: some View {
-        HStack(alignment: .center) {
-            Button {
-                dismiss()
-            } label: {
-                Label("Back", systemImage: "chevron.left")
-                    .labelStyle(.titleAndIcon)
-                    .font(.system(size: 17, weight: .medium, design: .default))
-            }
-            .foregroundStyle(FactTrailTheme.primaryAction(for: colorScheme))
-
-            Spacer()
-
-            Text("Pick up where you left off")
-                .font(.system(size: 17, weight: .semibold, design: .default))
-                .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-
-            Spacer()
-
-            Color.clear.frame(width: 40, height: 1)
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 12)
-        .padding(.bottom, 12)
+        Text("Pick up where you left off")
+            .font(.system(size: 17, weight: .semibold, design: .default))
+            .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 20)
+            .padding(.top, 18)
+            .padding(.bottom, 12)
     }
 
     private func card(_ incident: Incident) -> some View {
@@ -2866,9 +2742,8 @@ private struct IncidentEntryView: View {
                     SpecificsDateRow(date: $draft.incidentDate) {
                         userProvidedIncidentDate = true
                     }
-                    SpecificsTextRow(iconAssetName: "codoc-people", placeholder: "People involved", text: $draft.peopleInvolved)
+                    PeopleInvolvedRow(iconAssetName: "codoc-people", text: $draft.peopleInvolved)
                     SpecificsTextRow(iconAssetName: "codoc-location-pin", placeholder: "Location", text: $draft.location)
-                    Toggle("Child involved?", isOn: $draft.childInvolved)
 
                     // Explicitly labeled so the app-assigned category reads as a field,
                     // not a stray value floating under the toggle.
@@ -2877,7 +2752,10 @@ private struct IncidentEntryView: View {
                             .font(.system(size: 15, weight: .regular, design: .default))
                             .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
                         Spacer()
-                        Picker("Category", selection: $draft.category) {
+                        Picker("Category", selection: Binding(
+                            get: { draft.category },
+                            set: { draft.category = $0; draft.categoryWasSuggested = false }
+                        )) {
                             // Exchange isn't an entry category (it's a check-in kind), so
                             // it's excluded from the entry picker.
                             ForEach(IncidentCategory.allCases.filter { $0 != .exchange }) { category in
@@ -3221,7 +3099,12 @@ private struct IncidentEntryView: View {
             do {
                 let suggestion = try await aiService.analyzeIncident(draft: draft)
                 AIDebugLogger.log("Raw/parsed AIService response delivered to UI", suggestion.debugSummary)
-                draft.category = suggestion.suggestedCategory
+                // Never overwrite a category the user explicitly picked; only fill the
+                // neutral default, and mark it as suggested so the UI can label it.
+                if draft.category == .other {
+                    draft.category = suggestion.suggestedCategory
+                    draft.categoryWasSuggested = true
+                }
                 applyAIQuestions(suggestion.followUpQuestions)
                 applyAIEvidenceTypes(from: suggestion)
                 draft.patternTags = suggestion.patternTags
@@ -3443,6 +3326,125 @@ private struct SpecificsIcon: View {
             .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
             .frame(width: 28, height: 28)
             .background(FactTrailTheme.aiAccent(for: colorScheme).opacity(0.10), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+    }
+}
+
+/// "People involved" as a labeled row wrapping the shared `PeopleTagField`.
+private struct PeopleInvolvedRow: View {
+    let iconAssetName: String
+    @Binding var text: String
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            SpecificsIcon(assetName: iconAssetName)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("People involved")
+                    .font(.system(size: 13.5, weight: .regular, design: .default))
+                    .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                PeopleTagField(text: $text)
+            }
+        }
+    }
+}
+
+/// Tag-style people picker: tap yourself and anyone from My people, with a freehand
+/// "add someone else" fallback. Selection is stored back into the comma-separated
+/// `text` binding so the underlying model and summaries are unchanged. Names already
+/// on an entry that aren't in My people still appear as tags so edits never drop them.
+private struct PeopleTagField: View {
+    @Binding var text: String
+    @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("factTrailUserName") private var userName = ""
+    @State private var savedPeople: [SavedPerson] = []
+    @State private var addDraft = ""
+
+    private var selectedNames: [String] {
+        text.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    private var selfName: String {
+        let trimmed = userName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Me" : trimmed
+    }
+
+    /// Yourself first, then everyone in My people, then any already-selected names
+    /// that aren't in either list (freehand entries).
+    private var allTags: [String] {
+        var names: [String] = [selfName]
+        for person in savedPeople where !names.contains(where: { $0.caseInsensitiveCompare(person.name) == .orderedSame }) {
+            names.append(person.name)
+        }
+        for name in selectedNames where !names.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) {
+            names.append(name)
+        }
+        return names
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            FlexibleWrap(spacing: 8) {
+                ForEach(allTags, id: \.self) { name in
+                    personChip(name)
+                }
+            }
+
+            // Freehand fallback: add someone who isn't saved in My people.
+            HStack(spacing: 8) {
+                TextField("Add someone else", text: $addDraft)
+                    .font(.system(size: 13, weight: .regular, design: .default))
+                    .textInputAutocapitalization(.words)
+                    .onSubmit(commitAdd)
+                if !addDraft.trimmingCharacters(in: .whitespaces).isEmpty {
+                    Button(action: commitAdd) {
+                        Image(systemName: "plus.circle.fill")
+                            .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.top, 2)
+        }
+        .onAppear { savedPeople = PeopleStore.load() }
+    }
+
+    private func personChip(_ name: String) -> some View {
+        let isSelected = selectedNames.contains { $0.caseInsensitiveCompare(name) == .orderedSame }
+        return Button {
+            toggle(name)
+        } label: {
+            Text(name)
+                .font(.system(size: 13, weight: .medium, design: .default))
+                .foregroundStyle(isSelected ? .white : FactTrailTheme.primaryText(for: colorScheme))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(
+                    isSelected ? FactTrailTheme.aiAccent(for: colorScheme) : FactTrailTheme.surface(for: colorScheme),
+                    in: Capsule()
+                )
+                .overlay {
+                    Capsule().stroke(isSelected ? Color.clear : FactTrailTheme.border(for: colorScheme), lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func toggle(_ name: String) {
+        var names = selectedNames
+        if let index = names.firstIndex(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) {
+            names.remove(at: index)
+        } else {
+            names.append(name)
+        }
+        text = names.joined(separator: ", ")
+    }
+
+    private func commitAdd() {
+        let name = addDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        addDraft = ""
+        guard !name.isEmpty,
+              !selectedNames.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) else { return }
+        text = (selectedNames + [name]).joined(separator: ", ")
     }
 }
 
@@ -3852,10 +3854,14 @@ private struct SummaryReviewView: View {
 
                 ReviewSection(title: "What you logged", text: summaryDraft.draft.originalNotes)
 
-                // Only surface a category when the user actually chose one — the default
-                // is neutral, so an unset entry shows no (possibly wrong) category label.
+                // Surface a category whenever there is one, flagging it as "Suggested"
+                // when the app inferred it from the notes rather than the user choosing.
                 if summaryDraft.draft.category != .other {
-                    ReviewSection(title: "Category", text: summaryDraft.draft.category.rawValue)
+                    ReviewSection(
+                        title: "Category",
+                        text: summaryDraft.draft.category.rawValue,
+                        showsSuggestedBadge: summaryDraft.draft.categoryWasSuggested
+                    )
                 }
 
                 if !summaryDraft.draft.evidenceAttachments.isEmpty {
@@ -3871,7 +3877,7 @@ private struct SummaryReviewView: View {
 
                 summarySection
 
-                VStack(spacing: 12) {
+                VStack(spacing: 18) {
                     Button(action: onClose) {
                         Text("Close")
                             .frame(maxWidth: .infinity)
@@ -3879,15 +3885,18 @@ private struct SummaryReviewView: View {
                     .buttonStyle(FactTrailPrimaryButtonStyle())
                     .controlSize(.large)
 
+                    // Deliberately understated and set apart from the primary action:
+                    // deleting a saved entry should be possible but never an easy
+                    // mis-tap next to "Close".
                     Button(role: .destructive, action: onDelete) {
-                        Text("Delete entry")
-                            .foregroundStyle(.red)
-                            .frame(maxWidth: .infinity)
+                        Text("Delete this entry")
+                            .font(.system(size: 13, weight: .medium, design: .default))
+                            .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
                     }
-                    .buttonStyle(FactTrailGlassButtonStyle())
-                    .controlSize(.large)
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity)
                 }
-                .padding(.top, 4)
+                .padding(.top, 8)
             }
             .padding(20)
         }
@@ -4197,17 +4206,38 @@ private struct EvidenceAttachmentThumbnail: View {
 private struct ReviewSection: View {
     let title: String
     let text: String
+    var showsSuggestedBadge: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.headline)
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(.headline)
+                if showsSuggestedBadge {
+                    SuggestedBadge()
+                }
+            }
             Text(text)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding()
         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+/// A subtle marker that a value was auto-suggested by the app rather than entered by
+/// the user — so a suggested category is never mistaken for the user's own choice.
+private struct SuggestedBadge: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Text("Suggested")
+            .font(.system(size: 10, weight: .semibold, design: .default))
+            .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+            .padding(.vertical, 2)
+            .padding(.horizontal, 7)
+            .background(FactTrailTheme.aiAccent(for: colorScheme).opacity(0.12), in: Capsule())
     }
 }
 
@@ -4239,6 +4269,9 @@ private struct TimelineView: View {
     let checkIns: [CheckIn]
     let linkedNotes: [LinkedNote]
     let attachmentsProvider: (String) -> [StoredDocument]
+    /// All stored documents; standalone ones (not attached to any entry) appear as
+    /// their own markers on the timeline.
+    var allDocuments: [StoredDocument] = []
     let saveErrorMessage: String?
     let onEdit: (Incident) -> Void
     let onAddLinkedNote: (TimelineItem, String) -> Void
@@ -4298,6 +4331,7 @@ private struct TimelineView: View {
                                 BranchTimelineView(
                                     items: chronologicalItems,
                                     annotations: timelineAnnotations,
+                                    documents: standaloneDocuments,
                                     density: density,
                                     expandedItemIDs: $expandedItemIDs,
                                     notesFor: notes(for:),
@@ -4307,11 +4341,13 @@ private struct TimelineView: View {
                                     onSeeRelated: showRelatedEntries,
                                     onMoreInfo: { itemForMoreInfo = $0 },
                                     onAttachmentTapped: { previewAttachment = $0 },
+                                    onDocumentTapped: { previewAttachment = $0 },
                                     onLongPress: presentActionMenu
                                 )
                             case .list:
                                 ListTimelineView(
                                     groupedItems: groupedItems,
+                                    documents: standaloneDocuments,
                                     density: density,
                                     expandedItemIDs: $expandedItemIDs,
                                     notesFor: notes(for:),
@@ -4321,13 +4357,17 @@ private struct TimelineView: View {
                                     onSeeRelated: showRelatedEntries,
                                     onMoreInfo: { itemForMoreInfo = $0 },
                                     onAttachmentTapped: { previewAttachment = $0 },
+                                    onDocumentTapped: { previewAttachment = $0 },
                                     onLongPress: presentActionMenu
                                 )
                             case .calendar:
                                 CalendarTimelineView(
                                     items: filteredTimelineItems,
+                                    annotations: timelineAnnotations,
+                                    documents: standaloneDocuments,
                                     mode: calendarMode,
-                                    selectedDate: $selectedDate
+                                    selectedDate: $selectedDate,
+                                    onDocumentTapped: { previewAttachment = $0 }
                                 )
                             }
                         }
@@ -4429,6 +4469,13 @@ private struct TimelineView: View {
 
     private func attachments(for item: TimelineItem) -> [StoredDocument] {
         attachmentsProvider(item.id)
+    }
+
+    /// Documents not attached to any entry, shown as their own timeline markers.
+    /// Hidden while a related/pattern filter is scoping the timeline to specific entries.
+    private var standaloneDocuments: [StoredDocument] {
+        guard relatedFilterSource == nil, insightTagFilter == nil, initialTagFilter == nil else { return [] }
+        return allDocuments.filter { $0.linkedTimelineItemIds.isEmpty }
     }
 
 
@@ -4744,11 +4791,12 @@ private struct TimelineLegend: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        // Only the kinds that actually appear as nodes on the timeline/calendar.
-        // "Document" was removed: documents live in My Documents, not the timeline.
+        // Kinds that appear as nodes on the timeline/calendar. Standalone documents
+        // (added without being attached to an entry) get their own violet marker.
         HStack(spacing: 14) {
             legendItem("Entry", color: FactTrailTheme.primaryAction(for: colorScheme))
             legendItem("Check-in", color: FactTrailTheme.aiAccent(for: colorScheme))
+            legendItem("Document", color: timelineDocumentColor)
         }
         .font(.system(size: 12, weight: .medium, design: .default))
         .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
@@ -4770,6 +4818,8 @@ private struct BranchTimelineView: View {
     /// AI-detected pattern markers, interleaved chronologically on the spine.
     /// Empty until the AI analysis pass is wired up.
     var annotations: [TimelineAnnotation] = []
+    /// Standalone documents (not attached to an entry), interleaved as their own nodes.
+    var documents: [StoredDocument] = []
     let density: TimelineDensity
     @Binding var expandedItemIDs: Set<String>
     let notesFor: (TimelineItem) -> [LinkedNote]
@@ -4779,6 +4829,7 @@ private struct BranchTimelineView: View {
     let onSeeRelated: (TimelineItem) -> Void
     let onMoreInfo: (TimelineItem) -> Void
     let onAttachmentTapped: (StoredDocument) -> Void
+    var onDocumentTapped: (StoredDocument) -> Void = { _ in }
     let onLongPress: (TimelineItem) -> Void
     @Environment(\.colorScheme) private var colorScheme
     @State private var containerWidth: CGFloat = 0
@@ -4827,6 +4878,14 @@ private struct BranchTimelineView: View {
                         gutterWidth: gutterWidth
                     )
                     .padding(.bottom, 14)
+                case .document(let document):
+                    TimelineDocumentRow(
+                        document: document,
+                        cardColumnWidth: cardColumnWidth,
+                        gutterWidth: gutterWidth,
+                        onTap: { onDocumentTapped(document) }
+                    )
+                    .padding(.bottom, 14)
                 }
             }
         }
@@ -4873,6 +4932,7 @@ private struct BranchTimelineView: View {
         var itemIndex = 0
         // Items are newest-first; interleave annotations in the same order.
         var pendingAnnotations = annotations.sorted { $0.anchorDate > $1.anchorDate }
+        var pendingDocuments = documents.sorted { $0.createdAt > $1.createdAt }
 
         for item in items {
             // Flush AI pattern annotations newer than this entry (so they sit above it).
@@ -4880,24 +4940,41 @@ private struct BranchTimelineView: View {
                 rows.append(.annotation(next))
                 pendingAnnotations.removeFirst()
             }
+            // Flush standalone documents newer than this entry so they sit in date order.
+            while let next = pendingDocuments.first, next.createdAt > item.date {
+                appendYearMonthIfNeeded(for: next.createdAt, rows: &rows, currentYear: &currentYear, currentMonth: &currentMonth)
+                rows.append(.document(next))
+                pendingDocuments.removeFirst()
+            }
 
-            let year = Calendar.current.component(.year, from: item.date)
-            let month = Calendar.current.component(.month, from: item.date)
-            if currentYear != year {
-                rows.append(.year(year))
-                currentYear = year
-                currentMonth = nil
-            }
-            if currentMonth != month {
-                rows.append(.month(TimelineGroupKey(date: item.date).monthLabel))
-                currentMonth = month
-            }
+            appendYearMonthIfNeeded(for: item.date, rows: &rows, currentYear: &currentYear, currentMonth: &currentMonth)
             rows.append(.item(item, itemIndex))
             itemIndex += 1
         }
 
-        rows.append(contentsOf: pendingAnnotations.map { .annotation($0) })
+        for annotation in pendingAnnotations {
+            rows.append(.annotation(annotation))
+        }
+        for document in pendingDocuments {
+            appendYearMonthIfNeeded(for: document.createdAt, rows: &rows, currentYear: &currentYear, currentMonth: &currentMonth)
+            rows.append(.document(document))
+        }
         return rows
+    }
+
+    /// Emits the year/month header rows when a row crosses into a new year or month.
+    private func appendYearMonthIfNeeded(for date: Date, rows: inout [BranchRow], currentYear: inout Int?, currentMonth: inout Int?) {
+        let year = Calendar.current.component(.year, from: date)
+        let month = Calendar.current.component(.month, from: date)
+        if currentYear != year {
+            rows.append(.year(year))
+            currentYear = year
+            currentMonth = nil
+        }
+        if currentMonth != month {
+            rows.append(.month(TimelineGroupKey(date: date).monthLabel))
+            currentMonth = month
+        }
     }
 
     private func toggle(_ item: TimelineItem) {
@@ -4916,6 +4993,64 @@ private enum BranchRow {
     case month(String)
     case item(TimelineItem, Int)
     case annotation(TimelineAnnotation)
+    case document(StoredDocument)
+}
+
+/// Distinct violet used for standalone-document nodes across the timeline views, so a
+/// document reads as its own kind of record rather than an entry or a check-in.
+private let timelineDocumentColor = Color(hex: 0x7B6FAB)
+
+/// A standalone document (not attached to an entry) shown as its own node on the
+/// branch spine, tappable to preview.
+private struct TimelineDocumentRow: View {
+    let document: StoredDocument
+    let cardColumnWidth: CGFloat
+    let gutterWidth: CGFloat
+    let onTap: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 0) {
+            Color.clear
+                .frame(width: cardColumnWidth, height: 1)
+
+            Circle()
+                .fill(timelineDocumentColor.opacity(0.15))
+                .overlay { Circle().strokeBorder(timelineDocumentColor, lineWidth: 1.5) }
+                .overlay {
+                    Image(systemName: "doc.fill")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(timelineDocumentColor)
+                }
+                .frame(width: gutterWidth * 0.55, height: gutterWidth * 0.55)
+                .frame(width: gutterWidth)
+
+            Button(action: onTap) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(document.title)
+                        .font(.system(size: 13, weight: .semibold, design: .default))
+                        .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                        .lineLimit(1)
+                    Text("Document · \(DateFormatter.factTrailCompactDateTime.string(from: document.createdAt))")
+                        .font(.system(size: 11, weight: .regular, design: .default))
+                        .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                        .lineLimit(1)
+                }
+                .padding(.vertical, 8)
+                .padding(.horizontal, 12)
+                .frame(width: cardColumnWidth, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(timelineDocumentColor.opacity(colorScheme == .dark ? 0.16 : 0.08))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(timelineDocumentColor.opacity(0.4), lineWidth: 1)
+                }
+            }
+            .buttonStyle(.plain)
+        }
+    }
 }
 
 private struct TimelineAnnotationRow: View {
@@ -5053,6 +5188,7 @@ private struct BranchTimelineRow: View {
 
 private struct ListTimelineView: View {
     let groupedItems: [(key: TimelineGroupKey, items: [TimelineItem])]
+    var documents: [StoredDocument] = []
     let density: TimelineDensity
     @Binding var expandedItemIDs: Set<String>
     let notesFor: (TimelineItem) -> [LinkedNote]
@@ -5062,29 +5198,72 @@ private struct ListTimelineView: View {
     let onSeeRelated: (TimelineItem) -> Void
     let onMoreInfo: (TimelineItem) -> Void
     let onAttachmentTapped: (StoredDocument) -> Void
+    var onDocumentTapped: (StoredDocument) -> Void = { _ in }
     let onLongPress: (TimelineItem) -> Void
+
+    private enum ListRow: Identifiable {
+        case item(TimelineItem)
+        case document(StoredDocument)
+
+        var id: String {
+            switch self {
+            case .item(let item): return "item-\(item.id)"
+            case .document(let document): return "document-\(document.id.uuidString)"
+            }
+        }
+
+        var date: Date {
+            switch self {
+            case .item(let item): return item.date
+            case .document(let document): return document.createdAt
+            }
+        }
+    }
+
+    /// The month keys across both entries and standalone documents, newest first.
+    private var groupKeys: [TimelineGroupKey] {
+        var keys = groupedItems.map(\.key)
+        for document in documents {
+            let key = TimelineGroupKey(date: document.createdAt)
+            if !keys.contains(key) { keys.append(key) }
+        }
+        return keys.sorted { $0.sortDate > $1.sortDate }
+    }
+
+    private func rows(for key: TimelineGroupKey) -> [ListRow] {
+        let items = (groupedItems.first { $0.key == key }?.items ?? []).map(ListRow.item)
+        let docs = documents
+            .filter { TimelineGroupKey(date: $0.createdAt) == key }
+            .map(ListRow.document)
+        return (items + docs).sorted { $0.date > $1.date }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            ForEach(groupedItems, id: \.key) { group in
+            ForEach(groupKeys, id: \.self) { key in
                 VStack(alignment: .leading, spacing: 10) {
-                    TimelineYearPill(year: group.key.year)
-                    TimelineMonthLabel(month: group.key.monthLabel)
-                    ForEach(group.items) { item in
-                        TimelineItemCard(
-                            item: item,
-                            density: density,
-                            isExpanded: expandedItemIDs.contains(item.id),
-                            notes: notesFor(item),
-                            attachments: attachmentsFor(item),
-                            onToggle: { toggle(item) },
-                            onEdit: onEdit,
-                            onAddNote: onAddNote,
-                            onSeeRelated: onSeeRelated,
-                            onMoreInfo: onMoreInfo,
-                            onAttachmentTapped: onAttachmentTapped
-                        )
-                        .timelineActions(item: item, onLongPress: onLongPress)
+                    TimelineYearPill(year: key.year)
+                    TimelineMonthLabel(month: key.monthLabel)
+                    ForEach(rows(for: key)) { row in
+                        switch row {
+                        case .item(let item):
+                            TimelineItemCard(
+                                item: item,
+                                density: density,
+                                isExpanded: expandedItemIDs.contains(item.id),
+                                notes: notesFor(item),
+                                attachments: attachmentsFor(item),
+                                onToggle: { toggle(item) },
+                                onEdit: onEdit,
+                                onAddNote: onAddNote,
+                                onSeeRelated: onSeeRelated,
+                                onMoreInfo: onMoreInfo,
+                                onAttachmentTapped: onAttachmentTapped
+                            )
+                            .timelineActions(item: item, onLongPress: onLongPress)
+                        case .document(let document):
+                            TimelineDocumentListRow(document: document, onTap: { onDocumentTapped(document) })
+                        }
                     }
                 }
             }
@@ -5099,6 +5278,50 @@ private struct ListTimelineView: View {
                 expandedItemIDs.insert(item.id)
             }
         }
+    }
+}
+
+/// A standalone document as a compact card in the list view, tappable to preview.
+private struct TimelineDocumentListRow: View {
+    let document: StoredDocument
+    let onTap: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 10) {
+                Image(systemName: "doc.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(timelineDocumentColor)
+                    .frame(width: 30, height: 30)
+                    .background(timelineDocumentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("DOCUMENT")
+                        .font(.system(size: 10, weight: .semibold, design: .default))
+                        .tracking(0.6)
+                        .foregroundStyle(timelineDocumentColor)
+                    Text(document.title)
+                        .font(.system(size: 15, weight: .semibold, design: .default))
+                        .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 6)
+                Text(DateFormatter.factTrailCompactDateTime.string(from: document.createdAt))
+                    .font(.system(size: 11, weight: .medium, design: .default))
+                    .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(FactTrailTheme.surface(for: colorScheme))
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(timelineDocumentColor.opacity(0.35), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -5683,12 +5906,27 @@ private struct TimelineMonthLabel: View {
 
 private struct CalendarTimelineView: View {
     let items: [TimelineItem]
+    var annotations: [TimelineAnnotation] = []
+    var documents: [StoredDocument] = []
     let mode: TimelineCalendarMode
     @Binding var selectedDate: Date
+    var onDocumentTapped: (StoredDocument) -> Void = { _ in }
     @Environment(\.colorScheme) private var colorScheme
     @State private var visibleMonth = Date()
     @State private var custodySchedule: CustodySchedule? = CustodyScheduleStore.load()
     @State private var expandedDayItemIDs: Set<String> = []
+
+    private let patternAmber = Color(hex: 0xD97706)
+
+    /// AI pattern annotations anchored to a given calendar day.
+    private func annotations(on date: Date) -> [TimelineAnnotation] {
+        annotations.filter { Calendar.current.isDate($0.anchorDate, inSameDayAs: date) }
+    }
+
+    /// Standalone documents dated on a given calendar day.
+    private func documents(on date: Date) -> [StoredDocument] {
+        documents.filter { Calendar.current.isDate($0.createdAt, inSameDayAs: date) }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -5703,6 +5941,12 @@ private struct CalendarTimelineView: View {
             }
 
             selectedDayCard
+
+            // When there's no schedule yet, the setup nudge sits at the bottom,
+            // out of the way of the calendar itself.
+            if custodySchedule == nil {
+                custodySetupPrompt
+            }
         }
         .onAppear {
             visibleMonth = selectedDate
@@ -5734,11 +5978,24 @@ private struct CalendarTimelineView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
-        } else {
-            Text("Set a custody schedule in Menu → Custody schedule to color-code whose day each day is.")
+        }
+    }
+
+    private var custodySetupPrompt: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Color-code whose day is whose")
+                .font(.system(size: 13, weight: .semibold, design: .default))
+                .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+            Text("Set up your custody schedule from the menu and each day will be shaded for whoever has the kids.")
                 .font(.system(size: 12, weight: .regular, design: .default))
                 .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(FactTrailTheme.surface(for: colorScheme)))
+        .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1) }
+        .padding(.top, 4)
     }
 
     private var monthHeader: some View {
@@ -5786,7 +6043,9 @@ private struct CalendarTimelineView: View {
                         isSelected: Calendar.current.isDate(date, inSameDayAs: selectedDate),
                         items: items(on: date),
                         isExchangeDay: isExchangeDay(date) || isCustodyExchange(date),
-                        custodyColor: custodyColor(on: date)
+                        custodyColor: custodyColor(on: date),
+                        hasPatternAnnotation: !annotations(on: date).isEmpty,
+                        hasDocument: !documents(on: date).isEmpty
                     ) {
                         selectedDate = date
                     }
@@ -5835,6 +6094,28 @@ private struct CalendarTimelineView: View {
                                     }
                                 }
                             }
+                            ForEach(annotations(on: date)) { annotation in
+                                HStack(spacing: 6) {
+                                    Image(systemName: "flag.fill")
+                                        .font(.system(size: 8, weight: .bold))
+                                        .foregroundStyle(patternAmber)
+                                    Text(annotation.text)
+                                        .font(.caption2.weight(.medium))
+                                        .foregroundStyle(patternAmber)
+                                        .lineLimit(1)
+                                }
+                            }
+                            ForEach(documents(on: date)) { document in
+                                HStack(spacing: 6) {
+                                    Image(systemName: "doc.fill")
+                                        .font(.system(size: 8, weight: .bold))
+                                        .foregroundStyle(timelineDocumentColor)
+                                    Text(document.title)
+                                        .font(.caption2.weight(.medium))
+                                        .foregroundStyle(timelineDocumentColor)
+                                        .lineLimit(1)
+                                }
+                            }
                         }
                         Spacer()
                     }
@@ -5860,15 +6141,59 @@ private struct CalendarTimelineView: View {
                 custodyControlRow(schedule: schedule)
             }
 
+            ForEach(annotations(on: selectedDate)) { annotation in
+                HStack(spacing: 8) {
+                    Image(systemName: "flag.fill")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(patternAmber)
+                    Text(annotation.text)
+                        .font(.system(size: 13, weight: .medium, design: .default))
+                        .foregroundStyle(patternAmber)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                }
+                .padding(.horizontal, 14)
+                .padding(.bottom, 10)
+            }
+
             Divider()
 
             let dayItems = items(on: selectedDate)
-            if dayItems.isEmpty {
+            let dayDocuments = documents(on: selectedDate)
+            if dayItems.isEmpty && dayDocuments.isEmpty {
                 Text("No records logged on this day.")
                     .font(.footnote)
                     .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
                     .padding(14)
             } else {
+                ForEach(dayDocuments) { document in
+                    Button {
+                        onDocumentTapped(document)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "doc.fill")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(timelineDocumentColor)
+                                .frame(width: 20)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(document.title)
+                                    .font(.system(size: 15, weight: .semibold, design: .default))
+                                    .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                                Text("Document · \(DateFormatter.factTrailCompactDateTime.string(from: document.createdAt))")
+                                    .font(.caption)
+                                    .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme).opacity(0.5))
+                        }
+                        .padding(14)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    Divider()
+                }
                 ForEach(dayItems) { item in
                     let isExpanded = expandedDayItemIDs.contains(item.id)
                     Button {
@@ -6102,8 +6427,12 @@ private struct CalendarDayCell: View {
     let items: [TimelineItem]
     let isExchangeDay: Bool
     var custodyColor: Color? = nil
+    var hasPatternAnnotation: Bool = false
+    var hasDocument: Bool = false
     let onSelect: () -> Void
     @Environment(\.colorScheme) private var colorScheme
+
+    private let patternAmber = Color(hex: 0xD97706)
 
     var body: some View {
         Button(action: onSelect) {
@@ -6122,11 +6451,26 @@ private struct CalendarDayCell: View {
                                 .stroke(FactTrailTheme.aiAccent(for: colorScheme), lineWidth: 2)
                         }
                     }
+                    .overlay(alignment: .topTrailing) {
+                        // Amber pattern blip: an AI-detected pattern begins or was last
+                        // noted on this day.
+                        if hasPatternAnnotation {
+                            Circle()
+                                .fill(patternAmber)
+                                .frame(width: 6, height: 6)
+                                .offset(x: 1, y: -1)
+                        }
+                    }
 
                 HStack(spacing: 2) {
                     ForEach(Array(items.prefix(3).enumerated()), id: \.offset) { _, item in
                         Circle()
                             .fill(item.timelineColor(for: colorScheme))
+                            .frame(width: 5, height: 5)
+                    }
+                    if hasDocument {
+                        Circle()
+                            .fill(timelineDocumentColor)
                             .frame(width: 5, height: 5)
                     }
                 }
@@ -6279,14 +6623,11 @@ private struct InsightsScreenView: View {
 
     private var introBlock: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                LocationPulseDot(color: FactTrailTheme.aiAccent(for: colorScheme))
-                Text("BASED ON YOUR RECORDS")
-                    .font(.system(size: 10.5, weight: .semibold, design: .default))
-                    .tracking(0.8)
-                    .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
-            }
-            Text("We looked over what's been logged and noticed a few consistencies worth your attention — including some of your own.")
+            Text("BASED ON YOUR RECORDS")
+                .font(.system(size: 10.5, weight: .semibold, design: .default))
+                .tracking(0.8)
+                .foregroundStyle(FactTrailTheme.aiAccent(for: colorScheme))
+            Text("Here are a few consistencies worth your attention.")
                 .font(.system(size: 13.5, weight: .regular, design: .default))
                 .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
                 .lineSpacing(3)
@@ -6306,8 +6647,13 @@ private struct InsightsScreenView: View {
             )
             .padding(.top, 4)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)
         .padding(.bottom, 12)
+        // Draw the intro (and its "patterns found" pill) above the card stack so a
+        // taller-than-frame card can never overlap the pill.
+        .background(FactTrailTheme.background(for: colorScheme))
+        .zIndex(1)
     }
 
     // The card sits OUTSIDE the vertical scroll (only the pattern list below scrolls),
@@ -6928,7 +7274,11 @@ private struct IncidentExpandedDetailsView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 // Never blank — show a neutral default so the field always reads clearly.
-                TimelineDetailRow(label: "Category", value: incident.category.isEmpty ? "Uncategorized" : incident.category)
+                TimelineDetailRow(
+                    label: "Category",
+                    value: incident.category.isEmpty ? "Uncategorized" : incident.category,
+                    showsSuggestedBadge: incident.categoryWasSuggested
+                )
                 TimelineDetailRow(label: "People", value: incident.peopleInvolved)
                 TimelineDetailRow(label: "Location", value: incident.location)
                 TimelineDetailRow(label: "Child involved", value: incident.childInvolved ? "Yes" : "No")
@@ -7064,13 +7414,19 @@ private struct TimelineDetailSection: View {
 private struct TimelineDetailRow: View {
     let label: String
     let value: String
+    var showsSuggestedBadge: Bool = false
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(.system(size: 11, weight: .medium, design: .default))
-                .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+            HStack(spacing: 6) {
+                Text(label)
+                    .font(.system(size: 11, weight: .medium, design: .default))
+                    .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                if showsSuggestedBadge {
+                    SuggestedBadge()
+                }
+            }
             Text(displayValue)
                 .font(.system(size: 13, weight: .regular, design: .default))
                 .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))

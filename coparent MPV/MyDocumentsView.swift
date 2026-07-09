@@ -234,7 +234,9 @@ struct MyDocumentsView: View {
                         filterChip(filter)
                     }
                 }
-                .padding(.bottom, 4)
+                // Vertical breathing room so the horizontal scroll view doesn't clip
+                // the top/bottom sliver of each chip's 1.5pt Capsule stroke.
+                .padding(.vertical, 3)
             }
         }
         .padding(.horizontal, 20)

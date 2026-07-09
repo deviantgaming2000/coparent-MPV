@@ -4,7 +4,7 @@ import AuthenticationServices
 // MARK: - Step model
 
 enum OnboardingStep: Int, CaseIterable {
-    case splash, account, welcome, custody, mode, people, complete
+    case splash, account, welcome, walkthrough, custody, mode, people, complete
 }
 
 // MARK: - Container
@@ -46,6 +46,8 @@ struct OnboardingContainerView: View {
             OnboardingAccount(onSignedIn: advance, onSkip: advance)
         case .welcome:
             OnboardingWelcome(onContinue: advance)
+        case .walkthrough:
+            CoparoWalkthrough(onFinish: advance, finishTitle: "Continue")
         case .custody:
             OnboardingCustodyStep(onContinue: advance)
         case .mode:
@@ -230,61 +232,15 @@ struct OBSkipRow: View {
 
 struct OnboardingSplash: View {
     let onContinue: () -> Void
-    @State private var appeared = false
 
     var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [Color(hex: 0x2F5D8C), Color(hex: 0x3D7A8C), Color(hex: 0x4F8F8B)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(Color.white.opacity(0.14))
-                    .frame(width: 84, height: 84)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 24, style: .continuous)
-                            .stroke(Color.white.opacity(0.25), lineWidth: 1)
-                    )
-                    .overlay(
-                        Image(systemName: "doc.text.image")
-                            .font(.system(size: 34, weight: .regular))
-                            .foregroundStyle(.white)
-                    )
-                    .padding(.bottom, 22)
-                Text("Coparo")
-                    .font(.system(size: 30, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.bottom, 8)
-                Text("A clear record, quietly kept.")
-                    .font(.system(size: 13.5))
-                    .foregroundStyle(.white.opacity(0.75))
+        CoparoSplashView()
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onContinue)
+            .task {
+                try? await Task.sleep(for: .seconds(2.7))
+                onContinue()
             }
-            .opacity(appeared ? 1 : 0)
-            .offset(y: appeared ? 0 : 10)
-
-            VStack {
-                Spacer()
-                HStack(spacing: 6) {
-                    ForEach(0..<3, id: \.self) { i in
-                        Circle()
-                            .fill(i == 0 ? Color.white : Color.white.opacity(0.35))
-                            .frame(width: 6, height: 6)
-                    }
-                }
-                .padding(.bottom, 60)
-            }
-        }
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onContinue)
-        .task {
-            withAnimation(.easeOut(duration: 0.7).delay(0.15)) { appeared = true }
-            try? await Task.sleep(for: .seconds(2.7))
-            onContinue()
-        }
     }
 }
 
@@ -600,7 +556,8 @@ struct OnboardingPeopleStep: View {
         let people: [SavedPerson] = drafts.compactMap { draft in
             let name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty else { return nil }
-            return SavedPerson(name: name, role: draft.role)
+            let detail = draft.roleOther.trimmingCharacters(in: .whitespacesAndNewlines)
+            return SavedPerson(name: name, role: draft.role, roleDetail: draft.role == .other && !detail.isEmpty ? detail : nil)
         }
         guard !people.isEmpty else { return }
         var existing = PeopleStore.load()
