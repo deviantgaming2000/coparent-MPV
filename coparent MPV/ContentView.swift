@@ -6650,10 +6650,6 @@ private struct InsightsScreenView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)
         .padding(.bottom, 12)
-        // Draw the intro (and its "patterns found" pill) above the card stack so a
-        // taller-than-frame card can never overlap the pill.
-        .background(FactTrailTheme.background(for: colorScheme))
-        .zIndex(1)
     }
 
     // The card sits OUTSIDE the vertical scroll (only the pattern list below scrolls),
@@ -6680,7 +6676,8 @@ private struct InsightsScreenView: View {
                 }
             }
         }
-        .frame(height: 300)
+        // No fixed height: the stack sizes to the current card so a tall card is never
+        // clipped, and the pattern list below simply takes the remaining space.
         .padding(.horizontal, 20)
         .padding(.bottom, 6)
     }
@@ -6733,7 +6730,9 @@ private struct InsightsScreenView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 24)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // A fixed, comfortable height now that the card stack sizes to content.
+        .frame(maxWidth: .infinity)
+        .frame(height: 300)
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(FactTrailTheme.surface(for: colorScheme))
@@ -6881,8 +6880,6 @@ private struct InsightCardView: View {
                 }
             }
 
-            Spacer(minLength: 0)
-
             Rectangle()
                 .fill(FactTrailTheme.border(for: colorScheme))
                 .frame(height: 1)
@@ -6893,7 +6890,9 @@ private struct InsightCardView: View {
                 .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
         }
         .padding(20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        // Size to content (no maxHeight) so a tall card — one with a chart and full
+        // supporting list — is never forced into a shorter frame and clipped.
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .factTrailGlassCard(cornerRadius: 20)
     }
 
