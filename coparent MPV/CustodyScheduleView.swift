@@ -35,6 +35,9 @@ struct CustodyScheduleView: View {
     @State private var customCycle: [String] = []
     @State private var customIsBiweekly = false
     @State private var overrides: [String: String] = [:]
+    /// Exchange days: automatic (derived from custody changes) or hand-picked cycle days.
+    @State private var picksExchangeDays = false
+    @State private var manualExchangeDays: Set<Int> = []
 
     private var youName: String {
         let trimmed = userName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -52,7 +55,15 @@ struct CustodyScheduleView: View {
     }
 
     private var previewSchedule: CustodySchedule {
-        CustodySchedule(anchorDate: anchorDate, caregivers: caregivers, cycle: resolvedCycle, overrides: overrides, patternID: pattern.rawValue)
+        CustodySchedule(
+            anchorDate: anchorDate,
+            caregivers: caregivers,
+            cycle: resolvedCycle,
+            overrides: overrides,
+            patternID: pattern.rawValue,
+            // Drop any picks that no longer fit the cycle (e.g. after switching patterns).
+            exchangeDayIndices: picksExchangeDays ? manualExchangeDays.filter { $0 < resolvedCycle.count }.sorted() : nil
+        )
     }
 
     var body: some View {
@@ -68,6 +79,7 @@ struct CustodyScheduleView: View {
                     customEditor
                 }
                 startDateSection
+                exchangeSection
                 previewSection
                 saveArea
             }
@@ -206,6 +218,131 @@ struct CustodyScheduleView: View {
         .overlay { RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1) }
     }
 
+    // MARK: Exchange days
+
+    /// Amber, matching the exchange ring used in the preview and calendar legends.
+    private var exchangeColor: Color { CustodyPalette.color(3) }
+
+    private var exchangeSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionLabel("Exchange days")
+            Text("The days the kids change hands. Automatic marks the first day of each parent's block; pick the days yourself if your real handoffs land differently (like a Friday-evening exchange).")
+                .font(.system(size: 12))
+                .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                .fixedSize(horizontal: false, vertical: true)
+
+            exchangeChoiceRow(
+                title: "Automatic",
+                subtitle: "Marked wherever custody switches",
+                isSelected: !picksExchangeDays
+            ) {
+                withAnimation(.easeInOut(duration: 0.15)) { picksExchangeDays = false }
+            }
+
+            exchangeChoiceRow(
+                title: "Pick the days",
+                subtitle: "Tap the days your exchanges actually happen",
+                isSelected: picksExchangeDays
+            ) {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    if !picksExchangeDays && manualExchangeDays.isEmpty {
+                        // Start from what automatic would produce, then let them adjust.
+                        manualExchangeDays = previewSchedule.derivedExchangeIndices
+                    }
+                    picksExchangeDays = true
+                }
+            }
+
+            if picksExchangeDays {
+                exchangeDayGrid
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(FactTrailTheme.surface(for: colorScheme)))
+        .overlay { RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1) }
+        .onChange(of: pattern) { _, _ in reseedManualExchangeDays() }
+        .onChange(of: customIsBiweekly) { _, _ in reseedManualExchangeDays() }
+    }
+
+    private func exchangeChoiceRow(title: String, subtitle: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
+                    .font(.system(size: 16))
+                    .foregroundStyle(isSelected ? FactTrailTheme.primaryAction(for: colorScheme) : FactTrailTheme.mutedText(for: colorScheme).opacity(0.6))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                    Text(subtitle)
+                        .font(.system(size: 12))
+                        .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                }
+                Spacer()
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// One cell per cycle day, colored for whose day it is; tapping toggles the amber
+    /// exchange ring on that day.
+    private var exchangeDayGrid: some View {
+        let cycle = resolvedCycle
+        let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
+        return VStack(alignment: .leading, spacing: 8) {
+            LazyVGrid(columns: columns, spacing: 6) {
+                ForEach(cycle.indices, id: \.self) { index in
+                    let caregiver = caregivers.first { $0.id == cycle[index] }
+                    let color = CustodyPalette.color(caregiver?.colorIndex ?? 0)
+                    let isExchange = manualExchangeDays.contains(index)
+                    Button {
+                        if isExchange {
+                            manualExchangeDays.remove(index)
+                        } else {
+                            manualExchangeDays.insert(index)
+                        }
+                    } label: {
+                        VStack(spacing: 2) {
+                            Text(weekdayLetter(forCycleIndex: index))
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(color)
+                            Text(String((caregiver?.name.prefix(1)) ?? "?").uppercased())
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(color)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(color.opacity(0.14)))
+                        .overlay {
+                            if isExchange {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(exchangeColor, lineWidth: 2)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            HStack(spacing: 6) {
+                RoundedRectangle(cornerRadius: 3)
+                    .stroke(exchangeColor, lineWidth: 2)
+                    .frame(width: 12, height: 12)
+                Text("Exchange day · tap a day to toggle")
+                    .font(.system(size: 11))
+                    .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+            }
+        }
+    }
+
+    /// When the cycle's shape changes (new pattern, week↔biweek), old picks no longer
+    /// line up with real days, so restart from what automatic would produce.
+    private func reseedManualExchangeDays() {
+        guard picksExchangeDays else { return }
+        manualExchangeDays = previewSchedule.derivedExchangeIndices
+    }
+
     // MARK: Preview
 
     private var previewSection: some View {
@@ -313,6 +450,10 @@ struct CustodyScheduleView: View {
                 let normalized = existing.cycle.map { $0 == CustodyCaregiver.youID ? $0 : coParent.id }
                 customCycle = normalized.isEmpty ? defaultCustomCycle() : normalized
                 customIsBiweekly = existing.cycle.count > 7
+            }
+            if let indices = existing.exchangeDayIndices {
+                picksExchangeDays = true
+                manualExchangeDays = Set(indices)
             }
         } else {
             customCycle = defaultCustomCycle()

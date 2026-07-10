@@ -24,19 +24,25 @@ struct CustodySchedule: Codable, Equatable {
     var overrides: [String: String]
     /// Which preset (or "custom") produced the cycle, so the setup screen can reflect it.
     var patternID: String
+    /// When set, the user picked exactly which days of the repeating cycle are exchange
+    /// days (indices into `cycle`). Nil means automatic: an exchange is derived wherever
+    /// custody changes hands from the previous day.
+    var exchangeDayIndices: [Int]?
 
     init(
         anchorDate: Date,
         caregivers: [CustodyCaregiver],
         cycle: [String],
         overrides: [String: String] = [:],
-        patternID: String = CustodyPattern.custom.rawValue
+        patternID: String = CustodyPattern.custom.rawValue,
+        exchangeDayIndices: [Int]? = nil
     ) {
         self.anchorDate = anchorDate
         self.caregivers = caregivers
         self.cycle = cycle
         self.overrides = overrides
         self.patternID = patternID
+        self.exchangeDayIndices = exchangeDayIndices
     }
 
     init(from decoder: Decoder) throws {
@@ -46,18 +52,24 @@ struct CustodySchedule: Codable, Equatable {
         cycle = try container.decode([String].self, forKey: .cycle)
         overrides = try container.decodeIfPresent([String: String].self, forKey: .overrides) ?? [:]
         patternID = try container.decodeIfPresent(String.self, forKey: .patternID) ?? CustodyPattern.custom.rawValue
+        exchangeDayIndices = try container.decodeIfPresent([Int].self, forKey: .exchangeDayIndices)
     }
 
     // MARK: Resolution
+
+    /// The position of a date within the repeating cycle (nil when there is no cycle).
+    func cycleIndex(on date: Date) -> Int? {
+        guard !cycle.isEmpty else { return nil }
+        let offset = Self.dayOffset(from: anchorDate, to: date)
+        return ((offset % cycle.count) + cycle.count) % cycle.count
+    }
 
     /// The caregiver id responsible for a given date (override first, else the cycle).
     func caregiverID(on date: Date) -> String? {
         if let overridden = overrides[Self.dateKey(for: date)] {
             return overridden
         }
-        guard !cycle.isEmpty else { return nil }
-        let offset = Self.dayOffset(from: anchorDate, to: date)
-        let index = ((offset % cycle.count) + cycle.count) % cycle.count
+        guard let index = cycleIndex(on: date) else { return nil }
         return cycle[index]
     }
 
@@ -66,11 +78,31 @@ struct CustodySchedule: Codable, Equatable {
         return caregivers.first { $0.id == id }
     }
 
-    /// True when custody changes hands going into this day (i.e. an exchange happens).
+    /// True when an exchange happens on this day. If the user picked explicit exchange
+    /// days, those win; otherwise it's derived as the day custody changes hands.
     func isExchange(on date: Date) -> Bool {
-        guard let today = caregiverID(on: date) else { return false }
-        let previous = caregiverID(on: date.addingTimeInterval(-86_400))
+        if let exchangeDayIndices {
+            guard let index = cycleIndex(on: date) else { return false }
+            return exchangeDayIndices.contains(index)
+        }
+        guard let today = caregiverID(on: date),
+              // Calendar-aware "yesterday" — a fixed 86,400s stride lands on the wrong
+              // day across daylight-saving transitions.
+              let previousDay = Calendar.current.date(byAdding: .day, value: -1, to: date) else { return false }
+        let previous = caregiverID(on: previousDay)
         return previous != nil && previous != today
+    }
+
+    /// The exchange days the automatic rule would produce, as cycle indices — used to
+    /// pre-fill the editor when the user switches to picking days manually.
+    var derivedExchangeIndices: Set<Int> {
+        guard cycle.count > 1 else { return [] }
+        var result = Set<Int>()
+        for index in cycle.indices {
+            let previous = cycle[(index - 1 + cycle.count) % cycle.count]
+            if cycle[index] != previous { result.insert(index) }
+        }
+        return result
     }
 
     // MARK: Keys & math
