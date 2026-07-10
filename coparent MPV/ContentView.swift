@@ -5915,8 +5915,17 @@ private struct CalendarTimelineView: View {
     @State private var visibleMonth = Date()
     @State private var custodySchedule: CustodySchedule? = CustodyScheduleStore.load()
     @State private var expandedDayItemIDs: Set<String> = []
+    @State private var calendarNotes: [CalendarNote] = CalendarNoteStore.load()
+    @State private var noteSheetContext: CalendarNoteSheetContext?
 
     private let patternAmber = Color(hex: 0xD97706)
+
+    /// Identifies which note (or a fresh one) the note sheet is editing.
+    private struct CalendarNoteSheetContext: Identifiable {
+        let id = UUID()
+        var note: CalendarNote?
+        var defaultDate: Date
+    }
 
     /// AI pattern annotations anchored to a given calendar day.
     private func annotations(on date: Date) -> [TimelineAnnotation] {
@@ -5926,6 +5935,25 @@ private struct CalendarTimelineView: View {
     /// Standalone documents dated on a given calendar day.
     private func documents(on date: Date) -> [StoredDocument] {
         documents.filter { Calendar.current.isDate($0.createdAt, inSameDayAs: date) }
+    }
+
+    /// Calendar notes whose range covers a given day.
+    private func calendarNotes(covering date: Date) -> [CalendarNote] {
+        calendarNotes.filter { $0.covers(date) }
+    }
+
+    private func saveCalendarNote(_ note: CalendarNote) {
+        if let index = calendarNotes.firstIndex(where: { $0.id == note.id }) {
+            calendarNotes[index] = note
+        } else {
+            calendarNotes.append(note)
+        }
+        CalendarNoteStore.save(calendarNotes)
+    }
+
+    private func deleteCalendarNote(_ note: CalendarNote) {
+        calendarNotes.removeAll { $0.id == note.id }
+        CalendarNoteStore.save(calendarNotes)
     }
 
     var body: some View {
@@ -5951,6 +5979,15 @@ private struct CalendarTimelineView: View {
         .onAppear {
             visibleMonth = selectedDate
             custodySchedule = CustodyScheduleStore.load()
+            calendarNotes = CalendarNoteStore.load()
+        }
+        .sheet(item: $noteSheetContext) { context in
+            CalendarNoteSheet(
+                existing: context.note,
+                defaultDate: context.defaultDate,
+                onSave: saveCalendarNote,
+                onDelete: deleteCalendarNote
+            )
         }
     }
 
@@ -6045,7 +6082,8 @@ private struct CalendarTimelineView: View {
                         isExchangeDay: isExchangeDay(date) || isCustodyExchange(date),
                         custodyColor: custodyColor(on: date),
                         hasPatternAnnotation: !annotations(on: date).isEmpty,
-                        hasDocument: !documents(on: date).isEmpty
+                        hasDocument: !documents(on: date).isEmpty,
+                        hasCalendarNote: !calendarNotes(covering: date).isEmpty
                     ) {
                         selectedDate = date
                     }
@@ -6116,6 +6154,17 @@ private struct CalendarTimelineView: View {
                                         .lineLimit(1)
                                 }
                             }
+                            ForEach(calendarNotes(covering: date)) { note in
+                                HStack(spacing: 6) {
+                                    Image(systemName: "bookmark.fill")
+                                        .font(.system(size: 8, weight: .bold))
+                                        .foregroundStyle(calendarNoteColor)
+                                    Text(note.title)
+                                        .font(.caption2.weight(.medium))
+                                        .foregroundStyle(calendarNoteColor)
+                                        .lineLimit(1)
+                                }
+                            }
                         }
                         Spacer()
                     }
@@ -6127,15 +6176,62 @@ private struct CalendarTimelineView: View {
 
     private var selectedDayCard: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(selectedDate.formatted(.dateTime.weekday(.wide).month(.wide).day().year()))
-                    .font(.system(size: 18, weight: .bold, design: .default))
-                    .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
-                Text(selectedDaySubtitle)
-                    .font(.system(size: 13, weight: .regular, design: .default))
-                    .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(selectedDate.formatted(.dateTime.weekday(.wide).month(.wide).day().year()))
+                        .font(.system(size: 18, weight: .bold, design: .default))
+                        .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                    Text(selectedDaySubtitle)
+                        .font(.system(size: 13, weight: .regular, design: .default))
+                        .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                }
+                Spacer()
+                // Add a range note ("Taking the kids on vacation") starting on this day.
+                Button {
+                    noteSheetContext = CalendarNoteSheetContext(note: nil, defaultDate: selectedDate)
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 10, weight: .bold))
+                        Text("Note")
+                            .font(.system(size: 12, weight: .semibold, design: .default))
+                    }
+                    .foregroundStyle(calendarNoteColor)
+                    .padding(.vertical, 5)
+                    .padding(.horizontal, 10)
+                    .background(Capsule().fill(calendarNoteColor.opacity(0.10)))
+                    .overlay { Capsule().strokeBorder(calendarNoteColor.opacity(0.3), lineWidth: 1) }
+                }
+                .buttonStyle(.plain)
             }
             .padding(14)
+
+            ForEach(calendarNotes(covering: selectedDate)) { note in
+                Button {
+                    noteSheetContext = CalendarNoteSheetContext(note: note, defaultDate: selectedDate)
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "bookmark.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(calendarNoteColor)
+                        Text(note.title)
+                            .font(.system(size: 13, weight: .medium, design: .default))
+                            .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        Text(note.rangeText)
+                            .font(.system(size: 12, weight: .regular, design: .default))
+                            .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                    }
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(calendarNoteColor.opacity(0.08)))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 8)
+            }
 
             if let schedule = custodySchedule {
                 custodyControlRow(schedule: schedule)
@@ -6429,6 +6525,7 @@ private struct CalendarDayCell: View {
     var custodyColor: Color? = nil
     var hasPatternAnnotation: Bool = false
     var hasDocument: Bool = false
+    var hasCalendarNote: Bool = false
     let onSelect: () -> Void
     @Environment(\.colorScheme) private var colorScheme
 
@@ -6475,6 +6572,12 @@ private struct CalendarDayCell: View {
                     }
                 }
                 .frame(height: 6)
+
+                // Rose underline: a calendar note (vacation, visit) covers this day.
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(hasCalendarNote ? calendarNoteColor.opacity(0.85) : Color.clear)
+                    .frame(height: 3)
+                    .padding(.horizontal, 8)
             }
             .frame(maxWidth: .infinity, minHeight: 48)
             .background(
