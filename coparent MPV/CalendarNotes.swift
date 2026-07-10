@@ -104,35 +104,14 @@ struct CalendarNoteSheet: View {
                         .stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1.5)
                 }
 
-            VStack(spacing: 0) {
-                HStack {
-                    Text("From")
-                        .font(.system(size: 14, weight: .medium, design: .default))
-                        .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
-                    Spacer()
-                    DatePicker("", selection: $startDate, displayedComponents: .date)
-                        .labelsHidden()
-                        .onChange(of: startDate) { _, newValue in
-                            if endDate < newValue { endDate = newValue }
-                        }
-                }
+            // Hotel-style range picker: tap the first day, then the last day.
+            DateRangeCalendar(startDate: $startDate, endDate: $endDate)
                 .padding(12)
-                Divider()
-                HStack {
-                    Text("To")
-                        .font(.system(size: 14, weight: .medium, design: .default))
-                        .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
-                    Spacer()
-                    DatePicker("", selection: $endDate, in: startDate..., displayedComponents: .date)
-                        .labelsHidden()
+                .background(FactTrailTheme.surface(for: colorScheme), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1)
                 }
-                .padding(12)
-            }
-            .background(FactTrailTheme.surface(for: colorScheme), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(FactTrailTheme.border(for: colorScheme), lineWidth: 1)
-            }
 
             Button {
                 let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -163,7 +142,149 @@ struct CalendarNoteSheet: View {
         .padding(.bottom, 20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(FactTrailTheme.background(for: colorScheme).ignoresSafeArea())
-        .presentationDetents([.height(existing == nil ? 380 : 420)])
+        .presentationDetents([.height(existing == nil ? 620 : 656)])
         .presentationDragIndicator(.visible)
+    }
+}
+
+/// A compact one-tap-then-second-tap date-range picker, like booking a hotel stay:
+/// the first tap picks the start day, the next tap picks the end day (tapping an
+/// earlier day restarts the selection; tapping after a complete range starts over).
+struct DateRangeCalendar: View {
+    @Binding var startDate: Date
+    @Binding var endDate: Date
+
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var visibleMonth: Date
+    /// True between the first tap (start chosen) and the second (end chosen).
+    @State private var isPickingEnd = false
+
+    private let calendar = Calendar.current
+
+    init(startDate: Binding<Date>, endDate: Binding<Date>) {
+        _startDate = startDate
+        _endDate = endDate
+        _visibleMonth = State(initialValue: startDate.wrappedValue)
+    }
+
+    var body: some View {
+        VStack(spacing: 10) {
+            // Month header
+            HStack {
+                Button {
+                    shiftMonth(by: -1)
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                Spacer()
+                Text(visibleMonth.formatted(.dateTime.month(.wide).year()))
+                    .font(.system(size: 15, weight: .semibold, design: .default))
+                    .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                Spacer()
+                Button {
+                    shiftMonth(by: 1)
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(FactTrailTheme.secondaryText(for: colorScheme))
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+
+            // Weekday symbols
+            HStack {
+                ForEach(calendar.shortStandaloneWeekdaySymbols, id: \.self) { symbol in
+                    Text(symbol.uppercased())
+                        .font(.system(size: 10, weight: .bold, design: .default))
+                        .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                        .frame(maxWidth: .infinity)
+                }
+            }
+
+            // Day grid
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 7), spacing: 4) {
+                ForEach(Array(monthCells.enumerated()), id: \.offset) { _, day in
+                    if let day {
+                        dayCell(day)
+                    } else {
+                        Color.clear.frame(height: 36)
+                    }
+                }
+            }
+
+            // Live selection hint - doubles as the instruction.
+            Text(selectionHint)
+                .font(.system(size: 12, weight: .medium, design: .default))
+                .foregroundStyle(isPickingEnd ? calendarNoteColor : FactTrailTheme.mutedText(for: colorScheme))
+        }
+    }
+
+    private func dayCell(_ day: Date) -> some View {
+        let isStart = calendar.isDate(day, inSameDayAs: startDate)
+        let isEnd = calendar.isDate(day, inSameDayAs: endDate)
+        let inRange = day > startDate && day < endDate
+        return Button {
+            tapped(day)
+        } label: {
+            Text(day.formatted(.dateTime.day()))
+                .font(.system(size: 14, weight: isStart || isEnd ? .bold : .regular, design: .default))
+                .foregroundStyle(isStart || isEnd ? .white : FactTrailTheme.primaryText(for: colorScheme))
+                .frame(maxWidth: .infinity)
+                .frame(height: 36)
+                .background {
+                    if isStart || isEnd {
+                        Circle().fill(calendarNoteColor)
+                    } else if inRange {
+                        Rectangle().fill(calendarNoteColor.opacity(0.14))
+                    }
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Hotel-style selection: start, then end; earlier tap or a third tap restarts.
+    private func tapped(_ day: Date) {
+        if isPickingEnd && day >= calendar.startOfDay(for: startDate) {
+            endDate = day
+            isPickingEnd = false
+        } else {
+            startDate = day
+            endDate = day
+            isPickingEnd = true
+        }
+    }
+
+    private var selectionHint: String {
+        if isPickingEnd {
+            return "Now tap the last day (or Save for just this day)"
+        }
+        let start = startDate.formatted(.dateTime.month(.abbreviated).day())
+        guard !calendar.isDate(startDate, inSameDayAs: endDate) else { return start }
+        return "\(start) - \(endDate.formatted(.dateTime.month(.abbreviated).day()))"
+    }
+
+    /// The visible month's days, padded with nils so weekday columns line up.
+    private var monthCells: [Date?] {
+        guard let monthInterval = calendar.dateInterval(of: .month, for: visibleMonth) else { return [] }
+        let firstWeekday = calendar.component(.weekday, from: monthInterval.start)
+        let leadingBlanks = (firstWeekday - calendar.firstWeekday + 7) % 7
+        let dayCount = calendar.range(of: .day, in: .month, for: visibleMonth)?.count ?? 30
+        var cells: [Date?] = Array(repeating: nil, count: leadingBlanks)
+        for offset in 0..<dayCount {
+            cells.append(calendar.date(byAdding: .day, value: offset, to: monthInterval.start))
+        }
+        return cells
+    }
+
+    private func shiftMonth(by value: Int) {
+        visibleMonth = calendar.date(byAdding: .month, value: value, to: visibleMonth) ?? visibleMonth
     }
 }
