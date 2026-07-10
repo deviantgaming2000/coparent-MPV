@@ -210,9 +210,9 @@ struct DateRangeCalendar: View {
 
             // Day grid
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 7), spacing: 4) {
-                ForEach(Array(monthCells.enumerated()), id: \.offset) { _, day in
+                ForEach(Array(monthCells.enumerated()), id: \.offset) { index, day in
                     if let day {
-                        dayCell(day)
+                        dayCell(day, column: index % 7)
                     } else {
                         Color.clear.frame(height: 36)
                     }
@@ -226,26 +226,58 @@ struct DateRangeCalendar: View {
         }
     }
 
-    private func dayCell(_ day: Date) -> some View {
+    private func dayCell(_ day: Date, column: Int) -> some View {
+        let dayStart = calendar.startOfDay(for: day)
+        let rangeStart = calendar.startOfDay(for: startDate)
+        let rangeEnd = calendar.startOfDay(for: endDate)
         let isStart = calendar.isDate(day, inSameDayAs: startDate)
         let isEnd = calendar.isDate(day, inSameDayAs: endDate)
-        let inRange = day > startDate && day < endDate
+        let isSingleDay = calendar.isDate(startDate, inSameDayAs: endDate)
+        let inRange = dayStart > rangeStart && dayStart < rangeEnd
+        let band = calendarNoteColor.opacity(0.15)
+
         return Button {
             tapped(day)
         } label: {
-            Text(day.formatted(.dateTime.day()))
-                .font(.system(size: 14, weight: isStart || isEnd ? .bold : .regular, design: .default))
-                .foregroundStyle(isStart || isEnd ? .white : FactTrailTheme.primaryText(for: colorScheme))
-                .frame(maxWidth: .infinity)
-                .frame(height: 36)
-                .background {
-                    if isStart || isEnd {
-                        Circle().fill(calendarNoteColor)
+            ZStack {
+                // Continuous band: half-tints tuck under the endpoint circles, and the
+                // in-between cells butt edge-to-edge (rounded caps at week boundaries),
+                // so the range reads as one smooth bar per row.
+                if !isSingleDay {
+                    if isStart && !isEnd {
+                        HStack(spacing: 0) {
+                            Color.clear
+                            Rectangle().fill(band)
+                        }
+                    } else if isEnd && !isStart {
+                        HStack(spacing: 0) {
+                            Rectangle().fill(band)
+                            Color.clear
+                        }
                     } else if inRange {
-                        Rectangle().fill(calendarNoteColor.opacity(0.14))
+                        UnevenRoundedRectangle(
+                            topLeadingRadius: column == 0 ? 18 : 0,
+                            bottomLeadingRadius: column == 0 ? 18 : 0,
+                            bottomTrailingRadius: column == 6 ? 18 : 0,
+                            topTrailingRadius: column == 6 ? 18 : 0
+                        )
+                        .fill(band)
                     }
                 }
-                .contentShape(Rectangle())
+
+                if isStart || isEnd {
+                    Circle()
+                        .fill(calendarNoteColor)
+                        .frame(width: 36, height: 36)
+                }
+
+                Text(day.formatted(.dateTime.day()))
+                    .font(.system(size: 14, weight: isStart || isEnd ? .bold : .regular, design: .default))
+                    .foregroundStyle(isStart || isEnd ? .white : FactTrailTheme.primaryText(for: colorScheme))
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 36)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

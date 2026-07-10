@@ -6016,8 +6016,16 @@ private struct CalendarTimelineView: View {
                             color: CustodyPalette.color(caregiver.colorIndex).opacity(0.28)
                         )
                     }
+                    // The ring drawn around a day number when the kids change hands.
+                    HStack(spacing: 5) {
+                        Circle()
+                            .stroke(FactTrailTheme.aiAccent(for: colorScheme), lineWidth: 2)
+                            .frame(width: 11, height: 11)
+                        Text("Exchange")
+                            .lineLimit(1)
+                    }
                     if !calendarNotes.isEmpty {
-                        calendarLegend("Plans", color: calendarNoteColor.opacity(0.85))
+                        calendarLegend("Plans", color: calendarNoteColor.opacity(0.28))
                     }
                 }
                 .font(.system(size: 12, weight: .medium, design: .default))
@@ -6028,9 +6036,9 @@ private struct CalendarTimelineView: View {
             }
             .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
         } else if !calendarNotes.isEmpty {
-            // No custody schedule, but plans exist: still explain the rose underline.
+            // No custody schedule, but plans exist: still explain the rose highlight.
             FlexibleWrap(spacing: 12) {
-                calendarLegend("Plans", color: calendarNoteColor.opacity(0.85))
+                calendarLegend("Plans", color: calendarNoteColor.opacity(0.28))
             }
             .font(.system(size: 12, weight: .medium, design: .default))
             .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
@@ -6622,24 +6630,30 @@ private struct CalendarDayCell: View {
                     }
                 }
                 .frame(height: 6)
-
-                // Rose underline: a calendar note (vacation, visit) covers this day.
-                RoundedRectangle(cornerRadius: 1.5)
-                    .fill(hasCalendarNote ? calendarNoteColor.opacity(0.85) : Color.clear)
-                    .frame(height: 3)
-                    .padding(.horizontal, 8)
             }
             .frame(maxWidth: .infinity, minHeight: 48)
             .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(dayBackground)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(dayBackground)
+                    // A calendar note (vacation, visit) covers this day: wash the whole
+                    // cell in rose so the range reads as a block, over the custody tint.
+                    if hasCalendarNote && isInVisibleMonth {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(calendarNoteColor.opacity(0.18))
+                    }
+                }
             )
         }
         .buttonStyle(.plain)
     }
 
-    private var dayTextColor: Color {
+    private var isInVisibleMonth: Bool {
         Calendar.current.isDate(date, equalTo: visibleMonth, toGranularity: .month)
+    }
+
+    private var dayTextColor: Color {
+        isInVisibleMonth
         ? FactTrailTheme.primaryText(for: colorScheme)
         : FactTrailTheme.mutedText(for: colorScheme).opacity(0.42)
     }
