@@ -84,10 +84,18 @@ struct CalendarNoteSheet: View {
     }
 
     var body: some View {
+        ScrollView {
         VStack(alignment: .leading, spacing: 16) {
-            Text(existing == nil ? "Add a calendar note" : "Edit calendar note")
-                .font(.system(size: 20, weight: .bold, design: .default))
-                .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+            HStack(alignment: .firstTextBaseline) {
+                Text(existing == nil ? "Add a calendar note" : "Edit calendar note")
+                    .font(.system(size: 20, weight: .bold, design: .default))
+                    .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .font(.system(size: 14, weight: .medium, design: .default))
+                    .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                    .buttonStyle(.plain)
+            }
 
             Text("A label across the days it covers - it doesn't change your custody schedule.")
                 .font(.system(size: 13, weight: .regular, design: .default))
@@ -140,10 +148,13 @@ struct CalendarNoteSheet: View {
         .padding(.horizontal, 22)
         .padding(.top, 22)
         .padding(.bottom, 20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
         .background(FactTrailTheme.background(for: colorScheme).ignoresSafeArea())
         .presentationDetents([.height(existing == nil ? 620 : 656)])
-        .presentationDragIndicator(.visible)
+        // Deliberate exits only: a stray tap outside the sheet (or a swipe) must not
+        // throw away a half-entered note. Cancel and Save are the ways out.
+        .interactiveDismissDisabled(true)
     }
 }
 

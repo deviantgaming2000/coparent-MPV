@@ -5954,6 +5954,10 @@ private struct CalendarTimelineView: View {
         CalendarNoteStore.save(calendarNotes)
         // First note saved: the teaching hint has done its job.
         hasMarkedPlans = true
+        // Jump the calendar to the saved range so the result is always visible —
+        // otherwise a note placed in another month looks like it silently vanished.
+        selectedDate = note.startDate
+        visibleMonth = note.startDate
     }
 
     private func deleteCalendarNote(_ note: CalendarNote) {
