@@ -5917,6 +5917,9 @@ private struct CalendarTimelineView: View {
     @State private var expandedDayItemIDs: Set<String> = []
     @State private var calendarNotes: [CalendarNote] = CalendarNoteStore.load()
     @State private var noteSheetContext: CalendarNoteSheetContext?
+    /// One-time teaching flag: the "mark vacations and plans" hint shows until the
+    /// user has created their first calendar note, then never again.
+    @AppStorage("coparoHasMarkedPlans") private var hasMarkedPlans = false
 
     private let patternAmber = Color(hex: 0xD97706)
 
@@ -5949,6 +5952,8 @@ private struct CalendarTimelineView: View {
             calendarNotes.append(note)
         }
         CalendarNoteStore.save(calendarNotes)
+        // First note saved: the teaching hint has done its job.
+        hasMarkedPlans = true
     }
 
     private func deleteCalendarNote(_ note: CalendarNote) {
@@ -5969,6 +5974,10 @@ private struct CalendarTimelineView: View {
             }
 
             selectedDayCard
+
+            if !hasMarkedPlans {
+                plansHintCard
+            }
 
             // When there's no schedule yet, the setup nudge sits at the bottom,
             // out of the way of the calendar itself.
@@ -6007,6 +6016,9 @@ private struct CalendarTimelineView: View {
                             color: CustodyPalette.color(caregiver.colorIndex).opacity(0.28)
                         )
                     }
+                    if !calendarNotes.isEmpty {
+                        calendarLegend("Plans", color: calendarNoteColor.opacity(0.85))
+                    }
                 }
                 .font(.system(size: 12, weight: .medium, design: .default))
 
@@ -6015,7 +6027,46 @@ private struct CalendarTimelineView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+        } else if !calendarNotes.isEmpty {
+            // No custody schedule, but plans exist: still explain the rose underline.
+            FlexibleWrap(spacing: 12) {
+                calendarLegend("Plans", color: calendarNoteColor.opacity(0.85))
+            }
+            .font(.system(size: 12, weight: .medium, design: .default))
+            .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
         }
+    }
+
+    /// One-time nudge that teaches the Plans feature; tapping it starts a note on the
+    /// selected day. Disappears for good once the first note is saved.
+    private var plansHintCard: some View {
+        Button {
+            noteSheetContext = CalendarNoteSheetContext(note: nil, defaultDate: selectedDate)
+        } label: {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "bookmark.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(calendarNoteColor)
+                    .padding(.top, 1)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Mark vacations and plans")
+                        .font(.system(size: 13, weight: .semibold, design: .default))
+                        .foregroundStyle(FactTrailTheme.primaryText(for: colorScheme))
+                    Text("Going away with the kids? Tap + Plans on any day to label a stretch of dates. It shows across the calendar without changing your schedule.")
+                        .font(.system(size: 12, weight: .regular, design: .default))
+                        .foregroundStyle(FactTrailTheme.mutedText(for: colorScheme))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(calendarNoteColor.opacity(0.07)))
+            .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(calendarNoteColor.opacity(0.25), lineWidth: 1) }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 4)
     }
 
     private var custodySetupPrompt: some View {
@@ -6193,14 +6244,13 @@ private struct CalendarTimelineView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "plus")
                             .font(.system(size: 10, weight: .bold))
-                        Text("Note")
+                        Text("Plans")
                             .font(.system(size: 12, weight: .semibold, design: .default))
                     }
-                    .foregroundStyle(calendarNoteColor)
-                    .padding(.vertical, 5)
-                    .padding(.horizontal, 10)
-                    .background(Capsule().fill(calendarNoteColor.opacity(0.10)))
-                    .overlay { Capsule().strokeBorder(calendarNoteColor.opacity(0.3), lineWidth: 1) }
+                    .foregroundStyle(.white)
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 11)
+                    .background(Capsule().fill(calendarNoteColor))
                 }
                 .buttonStyle(.plain)
             }
